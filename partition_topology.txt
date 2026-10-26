@@ -28,6 +28,21 @@ A committed partition must pass configured invariants:
 
 A topology validator should produce structured diagnostics that identify the entity and failed invariant.
 
+===== Initial core implementation scope =====
+
+The first implementation uses a rectangular parameter domain, simple polygonal face cycles, shared boundary records and oriented boundary uses. It starts with one face covering the domain.
+
+The implemented transactional operations are:
+  * query region adjacency through shared boundary incidence;
+  * insert a vertex strictly inside an existing boundary segment;
+  * split a face by a segment joining two existing, non-adjacent boundary vertices when the segment lies inside that face;
+  * merge neighboring faces when their shared interface is one contiguous chain of boundary segments;
+  * delete an active face by replacing it with a background face, preserving full coverage.
+
+Each operation edits a candidate partition, validates the complete candidate, and publishes it only on success. Failed edits leave the original partition and its ID counters unchanged.
+
+This initial slice does not support faces with holes, disjoint interface chains during merge, free-standing polygon creation, arbitrary gaps, curved boundaries, or boundary motion. New regions are introduced by splitting an existing face; these limitations should be expanded only with corresponding topology and geometry tests.
+
 ===== Transactional edits =====
 
 All topology changes go through the partition manager. A transaction builds a candidate edit, validates it, and either commits it atomically or leaves the old state unchanged. Generators and UI tools submit commands/events; they do not mutate half-edge records directly.

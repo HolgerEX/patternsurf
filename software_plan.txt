@@ -212,7 +212,7 @@ The interface should also declare generator capabilities: continuous or discrete
 
 ==== Initial generator implementations ====
 
-Implement four generator families to exercise distinct mathematical requirements.
+Implement the three generator families required for the first release to exercise distinct mathematical requirements.
 
 {{https://images.openai.com/static-rsc-4/loZiYuQyddOmosKgnNs5tkYwP0cCdy6o-34kubcS7NhyeLTNXuHkyW1ePylYHXkuuDxc5P59k-cgAZe3nSR9MY8r7a3LfJS26GHbhKlYM6EiZxlvzJi44yqPFTfTRfb7jbx8so3r_mBc_JLJqRf5t05ei62D6YdFGs6DVHVaLdU?purpose=inline|Monochrome Contour Line Abstract Art}}
 
@@ -234,9 +234,9 @@ Implement a Life-like binary automaton first, then a multistate automaton. Use a
 
 {{https://images.openai.com/static-rsc-4/vGGwaPF4oSZROH2YoJYMr0lynPRRMpkELwDLNVCqVCFT84EDDMBEhrti2xJxxL6J6Ryh9qCTUTskjtt6Xz4E9cHq9UtVYkEeEm0R3juQqX3JhfbLPEfK5DaDZrtNaCOsPbA0B1vtGw4uY4KZcGxpzKiRCBxmfG6AuIUTY3rCJvDf2KuEyBRMAjd-JPVROAEl?purpose=inline|Abstract background with wave of scattered dots}}
 
-**4. Stochastic spatial patterns**
+**Deferred extension: stochastic spatial patterns**
 
-Implement minimum-distance point sampling with density and optional spatially varying parameters. It tests random-state management, exclusion zones across boundaries, and parameter control.
+Minimum-distance point sampling with density and optional spatially varying parameters is a candidate extension, not a first-release acceptance requirement. It can later test random-state management, exclusion zones across boundaries, and parameter control.
 
 These four methods are enough to reveal whether the architecture is genuinely general. Adding more algorithms before they work through the same domain and boundary abstractions would be premature.
 

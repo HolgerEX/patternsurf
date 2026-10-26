@@ -20,7 +20,15 @@ Dependency choice is not final until the exact required features, versions, buil
 
 Provide presets for at least Debug, Release and a sanitizer-enabled build. Expose options to disable Qt/UI and build only the core/CLI/tests. Require explicit C++20. Avoid global include directories and global compiler flags where target-level configuration is possible.
 
-The build instructions must work from a clean checkout. Record exact commands used for configuration, compilation and tests in the developer documentation.
+From a clean checkout, configure, build and test with:
+
+<code>
+cmake --preset debug
+cmake --build --preset debug
+ctest --preset debug
+</code>
+
+Use the `release` preset for optimized builds and `sanitizers` when the selected GCC or Clang toolchain provides AddressSanitizer and UndefinedBehaviorSanitizer runtimes. The sanitizer preset fails during configuration with a diagnostic if those runtimes cannot be linked.
 
 ===== Code conventions =====
 
