@@ -1,0 +1,54 @@
+====== Boundary constraints and coupling ======
+
+===== Shared interface model =====
+
+For adjacent regions i and j, let Gamma_ij be their shared interface. The partition owns its identity and geometry. Each generator provides whatever boundary trace/state is meaningful for its output type, using a declared convention for parameter direction and orientation.
+
+Do not apply one universal notion of continuity to all generator types. Value continuity for a scalar field, curve tangent matching, cellular-automaton neighbor exchange, and minimum clearance are different mathematical conditions.
+
+===== Policy categories =====
+
+^ Category ^ Example ^ Typical use ^
+| Value matching | q_i = q_j on Gamma_ij | continuous scalar/vector fields or color fields |
+| Flux conservation | J_i dot n_i + J_j dot n_j = 0 | transported/diffusive quantities with defined flux |
+| Derivative matching | specified normal/tangential derivative relation | smooth field transitions |
+| Curve continuity | endpoints and optionally tangent directions agree | vector-field curves and geometric strokes |
+| Phase/alignment | motifs share phase, orientation or anchor points | periodic grids and tilings |
+| Exclusion/clearance | cross-boundary distance >= d_min | particles, dots and fabrication patterns |
+| Discrete neighbor exchange | sites across a boundary are neighbors under a mapping | cellular automata |
+| Soft compatibility | minimize a boundary mismatch functional | aesthetic harmony where exact equality is not required |
+
+The mathematical convention of a policy must state whether it uses parameter-space geometry or physical surface geometry. Normal orientation and the correspondence between both sides must be explicit.
+
+===== Hard and soft constraints =====
+
+A hard constraint is an invariant or equation that must hold within a configured numerical tolerance. A soft constraint contributes an objective or penalty and can remain unsatisfied. Never silently convert a hard condition to a soft one to make a solver appear successful.
+
+A general residual is C_ij(state_i, state_j, interface, parameters). A soft energy may be E=sum over interfaces of integral(weight * norm(C_ij)^2) ds. The measure ds and the residual norm must be defined for each policy; parameter-space arclength and physical surface arclength are not interchangeable.
+
+===== Solver responsibilities =====
+
+The boundary subsystem:
+  - validates whether a policy is supported by both adjacent generators;
+  - supplies a consistent interface correspondence;
+  - evaluates hard-condition residuals and soft objectives;
+  - reports convergence, infeasibility and conflicts;
+  - respects policy priority/locking and configured tolerances;
+  - never mutates topology as an undocumented side effect.
+
+The subsystem need not use one universal solver. Exact construction, constrained optimization, PDE interface assembly and discrete neighbor mapping can be separate policy implementations.
+
+===== Initial acceptance scope =====
+
+Implement at least:
+  * a geometric curve interface condition suitable for matched endpoints and optional tangent directions;
+  * one soft compatibility objective with inspectable residual/score;
+  * unsupported-combination checks;
+  * explicit conflict/failure reporting;
+  * tests where constraints succeed and tests where they are contradictory.
+
+Add field-value and flux conditions with the PDE milestone, and cross-region cellular-automaton neighbor exchange with the cellular-automaton milestone.
+
+===== Diagnostics =====
+
+Each condition result should identify the interface, policy ID, hard/soft classification, measured residual/score, tolerance/target, convergence state, and diagnostic message. Include enough information for the UI to display which boundary failed and why.

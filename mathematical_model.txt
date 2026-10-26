@@ -1,0 +1,81 @@
+====== Mathematical model and notation ======
+
+===== Ambient space and surface =====
+
+The ambient space is Euclidean R^3. Let D be a supported subset of R^2, with coordinates (u,v). A surface patch is
+
+<code>
+r : D -> R^3
+r(u,v) = (x(u,v), y(u,v), z(u,v))
+S = r(D)
+</code>
+
+The regular case requires r to be sufficiently differentiable and r_u x r_v != 0. Piecewise-regular charts and seams are allowed only where their behavior is explicitly modeled. A plane is the special case r(u,v)=(u,v,0).
+
+D is the primary computational domain. Regions and patterns are defined in D, then mapped to S. The software must distinguish a parameter point from its physical image because r may not be injective.
+
+===== Surface metric =====
+
+Let r_u=partial r/partial u and r_v=partial r/partial v. The first fundamental form is
+
+<code>
+g = [[E,F],[F,G]]
+E = r_u dot r_u
+F = r_u dot r_v
+G = r_v dot r_v
+|g| = E*G - F*F
+</code>
+
+A parameter-space algorithm uses ordinary (u,v) coordinates. A surface-aware algorithm uses g and intrinsic operators. These modes must be declared explicitly; uniform parameter spacing does not imply uniform physical spacing.
+
+For scalar p, the Laplace-Beltrami operator is
+
+<code>
+Delta_S p = (1/sqrt(|g|)) partial_a (sqrt(|g|) g^(ab) partial_b p)
+</code>
+
+with repeated a,b summed over u,v. Implementations must define singularity and regularity assumptions before evaluating this expression.
+
+===== Time-dependent partition =====
+
+At time t, active regions are P(t)={Omega_i(t): i in I(t)}. I(t) may change over time. For a full partition, region interiors are pairwise disjoint and their closures cover the domain, subject to a documented boundary-ownership convention. A background/unassigned region can be used if full coverage is not required.
+
+Geometry changes include boundary motion and deformation. Topology changes include birth, death, split, merge and adjacency changes. These are distinct operations.
+
+===== Region representations =====
+
+Possible region representations include polygonal faces in a shared-edge complex, spline boundaries, level-set functions phi_i(u,v,t), and discretized labels. No one representation is assumed suitable for all algorithms. The authoritative first-release representation is a shared-edge planar subdivision; alternatives must be converted/validated before they become committed topology.
+
+For an implicit region defined by phi<0, the boundary is phi=0. Regular level-set points require grad(phi) != 0. Independent level sets do not by themselves guarantee a valid partition; they must be reconciled.
+
+===== Fields and generators =====
+
+A region's generator may maintain state q_i. The state may be a scalar/vector field, discrete site states, geometry primitives, particles, or another typed representation. Do not identify generator state with rendered output.
+
+A general update may be written as
+
+<code>
+q_i(t + dt) = G_i(q_i, Omega_i, boundary_data, parameters, random_state)
+</code>
+
+This is a conceptual contract: static generators, continuous-time solvers, discrete automata and stochastic generators have different stepping semantics. The interface should reflect those differences through capabilities and typed contexts.
+
+===== Derived parameter coordinates =====
+
+A generator may define psi_t(u,v)=(h(u,v,t), k(u,v,t)). If a pattern is defined in the derived coordinates by p_tilde(h,k,t), its original-coordinate representation is
+
+<code>
+p(u,v,t) = p_tilde(h(u,v,t), k(u,v,t), t)
+</code>
+
+The Jacobian is [[h_u,h_v],[k_u,k_v]]. A singular Jacobian, non-injective mapping, or absent inverse may be valid for some methods and invalid for others; validity requirements must be declared by the generator.
+
+===== Interface conditions =====
+
+Adjacent regions i and j share an interface Gamma_ij(t). Conditions may match field values, fluxes, derivatives, phases, curve endpoints, directions, minimum clearances, or a soft compatibility objective. The meaning of any normal derivative or flux must define which metric and orientation it uses.
+
+Hard constraints are required to satisfy a stated numerical tolerance. Soft constraints contribute an objective or penalty and may remain nonzero. Infeasibility and unsupported conditions must be observable outputs, not silently hidden.
+
+===== Time domains =====
+
+Distinguish geometric time, generator time, and render/display time. A continuous solver may substep within one display frame; a cellular automaton advances in integer generations; topology events occur at specified simulation times. The scheduler owns ordering and synchronization policy.

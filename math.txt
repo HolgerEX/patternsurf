@@ -1,0 +1,855 @@
+====== Mathematical specification: A general procedural pattern engine on evolving surfaces ======
+
+The software should be formulated as a general mathematical framework for procedural fields, evolving domains, and boundary-coupled pattern dynamics on parametrized surfaces.
+
+The key design decision is to distinguish four mathematical objects:
+
+1. The ambient three-dimensional space and the geometric surface embedded in it.
+2. The time-dependent partition of the surface's parameter domain into regions.
+3. The pattern-generating fields and processes defined on those regions.
+4. The coupling conditions that govern interactions between neighboring regions.
+
+These objects should be independent mathematical layers. This separation permits future extensions to new surface geometries, differential equations, cellular automata, discrete tilings, stochastic processes, and other generation methods without redesigning the entire engine.
+
+The specification below makes the geometry, subdivision, evolution, and pattern-generation framework precise.
+
+===== 1. The ambient space and the main object =====
+
+==== 1.1 Ambient space ====
+
+The ambient space is three-dimensional Euclidean space:
+
+$$\mathcal E=\mathbb R^3.$$
+
+The main geometric object is not fundamentally a planar image. It is a two-dimensional parametrized surface embedded in $$\mathbb R^3$$.
+
+Let $$D\subseteq\mathbb R^2$$ be the parameter domain, with coordinates
+
+$$(u,v)\in D.$$
+
+Define the surface parametrization
+
+$$\mathbf r:D\longrightarrow\mathbb R^3,$$
+
+where
+
+$$
+\mathbf r(u,v)=
+\begin{pmatrix}
+x(u,v)\\
+y(u,v)\\
+z(u,v)
+\end{pmatrix}.
+$$
+
+The physical surface is the image
+
+$$S=\mathbf r(D)\subseteq\mathbb R^3.$$
+
+The domain $$D$$ may be a rectangle, but it need not be. A rectangular domain is the natural default for a conventional canvas.
+
+A planar rectangle is a special case, for example,
+
+$$
+\mathbf r(u,v)=(u,v,0), \qquad (u,v)\in(0,1)^2.
+$$
+
+Thus, the planar case is contained within the general formulation without requiring a separate geometry model.
+
+==== 1.2 Regularity and admissible parametrizations ====
+
+To use differential geometry and differential equations reliably, the surface should satisfy suitable regularity conditions.
+
+For a differentiable parametrization, define the tangent vectors
+
+$$
+\mathbf r_u=\frac{\partial\mathbf r}{\partial u}, \qquad
+\mathbf r_v=\frac{\partial\mathbf r}{\partial v}.
+$$
+
+A regular surface patch satisfies
+
+$$
+\mathbf r_u\times\mathbf r_v\ne\mathbf 0.
+$$
+
+This condition ensures that the two parameter directions span a two-dimensional tangent plane.
+
+For a general-purpose engine, it is useful to support at least two classes:
+
+* Regular surface patches, where the differential geometry is well-defined everywhere in the active domain.
+* Piecewise-regular surfaces, where singularities, seams, or transitions between parametrizations are explicitly represented.
+
+The second class is important for surfaces such as spheres represented with multiple charts, surfaces with poles, and meshes approximating more complicated geometries.
+
+If the parametrization is not injective, distinct parameter points may represent the same physical point. The framework must therefore distinguish the parameter domain from the physical surface and define how duplicated points and seams are handled.
+
+===== 2. The parameter domain is the primary computational domain =====
+
+The most important modeling choice is that all subdivisions and all pattern generators operate in the surface's parameter domain $$D$$.
+
+The surface embedding $$\mathbf r$$ determines where the result appears in three-dimensional space, but it does not determine how the regions are represented.
+
+The computational domain remains
+
+$$D\subseteq\mathbb R^2.$$
+
+Consequently, each pattern can be calculated using $$(u,v)$$, regardless of whether the physical surface is flat, curved, or highly distorted in three-dimensional space.
+
+This has several advantages:
+
+* Geometry and pattern generation remain independent.
+* A pattern can be transferred to a different surface by changing $$\mathbf r$$.
+* Subdivision operations need only understand two-dimensional geometry.
+* Differential equations and cellular automata can operate in a consistent coordinate system.
+* The engine can distinguish patterns that depend on the parameter coordinates from patterns that depend on physical distances and directions on the surface.
+
+One subtlety is important: equal distances in parameter space do not necessarily correspond to equal distances on the physical surface. This distinction is addressed in Section 5.
+
+===== 3. A mathematical model for evolving subdivisions =====
+
+We need a representation that supports regions whose shapes and sizes change continuously, as well as regions that appear, disappear, split, or merge.
+
+A static polygon list is insufficient as the fundamental model. Instead, subdivisions should be represented as a time-dependent partition of the parameter domain.
+
+Let $$t\in T$$, where $$T\subseteq\mathbb R$$ is the time domain. For a discrete simulation, $$t$$ may be restricted to integer time steps.
+
+==== 3.1 The time-dependent partition ====
+
+At time $$t$$, let the active regions be
+
+$$
+\mathcal P(t)=
+\left\{ \Omega_i(t):i\in I(t) \right\},
+$$
+
+where each region satisfies
+
+$$\Omega_i(t)\subseteq D.$$
+
+The index set $$I(t)$$ is itself time-dependent. This is essential: regions are not required to exist for the entire simulation.
+
+For a partition that covers the entire domain, the regions satisfy
+
+$$
+\bigcup_{i\in I(t)}\overline{\Omega_i(t)}
+=\overline D
+$$
+
+and, for distinct regions,
+
+$$
+\operatorname{int}\Omega_i(t)\cap\operatorname{int}\Omega_j(t)
+=\varnothing.
+$$
+
+Here, $$\operatorname{int}$$ denotes the interior and the overline denotes closure.
+
+These conditions mean that the regions cover the domain without overlapping interiors. Shared boundaries are permitted.
+
+If gaps or unassigned areas are desirable, introduce a background region $$\Omega_0(t)$$, or relax the coverage condition and explicitly represent the uncovered set.
+
+==== 3.2 Representing each region using an implicit function ====
+
+A particularly flexible representation assigns a scalar function to each region:
+
+$$\phi_i:D\times T\longrightarrow\mathbb R.$$
+
+Define the region by
+
+$$
+\Omega_i(t)=
+\left\{ (u,v)\in D: \phi_i(u,v,t)<0 \right\}.
+$$
+
+Its boundary is represented by the zero level set
+
+$$
+\partial\Omega_i(t)\subseteq
+\left\{ (u,v)\in D: \phi_i(u,v,t)=0 \right\}.
+$$
+
+For a well-behaved regular boundary, we additionally require
+
+$$
+\nabla_{u,v}\phi_i\ne\mathbf 0
+\quad\text{on }\partial\Omega_i(t).
+$$
+
+This is the implicit-region or level-set representation.
+
+{{https://images.openai.com/static-rsc-4/kUT7tbRcBpIiIlhPDZoiYW7S6UeO8wDBnl8hcACYnhwPhslTL_WvlbJgmn7Eg0KbNClN3e_ncOOtTsuLS-w0Sg1NuU-K3xSyhfMTAN_wm1ldgPHSNEn0x5Gkv9CFh7DfKLDogPkOfKsI-RWvxGIGoMZAuu55ZZ8dkN3G1hMHIHM?purpose=inline|Conceptual illustration of an implicit boundary: the region is defined by the sign of a scalar field, and the boundary is its zero contour.}}
+
+Why this representation is useful:
+
+* Curves can move without explicitly tracking every boundary vertex.
+* Shapes can change continuously.
+* Splitting and merging can occur through changes in the level-set topology.
+* New regions can be introduced and removed.
+* The representation supports numerical simulation and geometric analysis.
+
+For example, a circular region centered at $$(a,b)$$ with time-dependent radius $$\rho(t)$$ can be represented as
+
+$$
+\phi(u,v,t)
+=(u-a)^2+(v-b)^2-\rho(t)^2.
+$$
+
+The region is the interior of the circle whenever $$\rho(t)>0$$. Shrinking $$\rho(t)$$ causes the region to contract; allowing $$\rho(t)$$ to reach zero and then become positive again can describe an extinction and reappearance event, provided the region's lifecycle is handled explicitly.
+
+==== 3.3 One field per region versus one field for the entire partition ====
+
+Independent level-set functions are flexible, but they do not automatically guarantee a valid partition. Two independently evolved regions could overlap or leave a gap.
+
+Therefore, the engine should support two complementary partition representations.
+
+**Representation A — Independent regions**
+
+Each region has its own geometric description, such as a level-set function, polygon, spline boundary, or other implicit or explicit representation.
+
+This is useful when regions have independent dynamics and complex shapes.
+
+**Representation B — A global region-label field**
+
+Define
+
+$$L:D\times T\longrightarrow\mathcal L,$$
+
+where $$\mathcal L$$ is a set of region identifiers, together with an optional unassigned label.
+
+Then
+
+$$
+\Omega_i(t)=
+\left\{ (u,v)\in D:L(u,v,t)=i \right\}.
+$$
+
+A single-valued label field naturally prevents two labels from occupying the same parameter point. However, its discrete implementation may produce pixelated boundaries, and it does not by itself guarantee smooth geometry.
+
+For a general-purpose engine, these representations should be interchangeable through a common region abstraction rather than forcing every algorithm to use the same boundary representation.
+
+==== 3.4 Recommended generalization: a time-dependent partition complex ====
+
+For the most general architecture, represent the subdivision as a time-dependent collection of geometric cells and their relationships:
+
+$$
+\mathcal K(t)=
+\bigl(V(t),E(t),F(t),\ldots\bigr).
+$$
+
+Here:
+
+* $$V(t)$$ represents vertices or geometric points.
+* $$E(t)$$ represents edges or boundary segments.
+* $$F(t)$$ represents two-dimensional faces or regions.
+* Higher-dimensional bookkeeping structures may encode incidence and adjacency.
+
+This is a geometric complex or, more generally, a cell complex. Its exact implementation may use polygons, curves, implicit regions, meshes, or combinations of them.
+
+The complex records which regions share which boundaries. This information is critical for boundary-aware pattern generation.
+
+The geometry and topology must be distinguished:
+
+* Geometry changes include boundary motion, shape deformation, and changes in area.
+* Topology changes include creation, deletion, splitting, merging, and changes in adjacency.
+
+A cell complex captures these relationships explicitly, while level-set fields are particularly effective for representing moving boundaries and topology changes.
+
+**Recommendation:** use a hybrid model. Let a partition manager own region identities, topology, and adjacency; let each region use an appropriate geometric representation, with implicit level sets available for continuous deformation and topology changes. A global label field or mesh representation can be used when the chosen algorithm requires it.
+
+===== 4. Region lifecycles and topology-changing events =====
+
+The set $$I(t)$$ of active regions changes over time. A region therefore needs more than geometry: it needs a lifecycle.
+
+A region $$i$$ can be associated with a lifetime interval
+
+$$
+J_i=(t_i^{\mathrm{birth}},t_i^{\mathrm{death}}),
+$$
+
+where the death time may be unbounded.
+
+For $$t\in J_i$$, the region has an active geometric state $$\Omega_i(t)$$. Outside that interval, it is inactive.
+
+This representation distinguishes a region that temporarily becomes very small from one that has ceased to exist.
+
+==== 4.1 Splitting and merging ====
+
+Suppose region $$i$$ splits into two regions at time $$t_*$$. The event can be expressed as
+
+$$
+\Omega_i(t_*^-)
+\longrightarrow
+\Omega_j(t_*^+)\cup\Omega_k(t_*^+),
+$$
+
+where $$t_*^-$$ and $$t_*^+$$ denote the states immediately before and after the event.
+
+For a split that conserves area and introduces no gap, one can require
+
+$$
+\operatorname{int}\Omega_j(t_*^+)
+\cap
+\operatorname{int}\Omega_k(t_*^+)
+=\varnothing
+$$
+
+and
+
+$$
+\Omega_i(t_*^-)
+=
+\overline{\Omega_j(t_*^+)}
+\cup
+\overline{\Omega_k(t_*^+)}
+$$
+
+up to shared boundaries and the chosen convention for assigning boundary points.
+
+A merge is the inverse type of event. Creation and destruction events need not conserve area; their effects on coverage must be specified by the partition policy.
+
+==== 4.2 State transfer during topology changes ====
+
+A split or merge affects more than geometry. Each region may also carry a pattern state, generator parameters, and history.
+
+The engine should therefore define transfer operators:
+
+$$
+\mathcal T_{\mathrm{split}}:
+(q_i,\Omega_i)
+\longmapsto
+(q_j,\Omega_j,q_k,\Omega_k)
+$$
+
+and
+
+$$
+\mathcal T_{\mathrm{merge}}:
+(q_i,\Omega_i,q_j,\Omega_j)
+\longmapsto
+(q_k,\Omega_k).
+$$
+
+Here $$q_i$$ denotes the region's internal pattern state.
+
+These operators determine how pattern fields, random seeds, cellular-automaton states, and other data are initialized or transferred when topology changes.
+
+For example, a cellular automaton might inherit its states from the parent region during a split, whereas a stochastic pattern might be regenerated using a new seed.
+
+This must be configurable because different generation methods have different mathematical notions of state.
+
+===== 5. Pattern generation in the original coordinates and derived parametrizations =====
+
+The engine should use the original parameters $$(u,v)$$ as the canonical coordinate system for pattern generation.
+
+A region's pattern state is defined on $$\Omega_i(t)\subseteq D$$. The physical surface embedding is applied separately through $$\mathbf r$$.
+
+==== 5.1 Direct parameter-space patterns ====
+
+The simplest case is a scalar field
+
+$$
+p_i:\Omega_i(t)\times T\longrightarrow\mathbb R.
+$$
+
+More generally, the pattern may be vector-valued:
+
+$$
+\mathbf p_i:
+\Omega_i(t)\times T\longrightarrow\mathbb R^m.
+$$
+
+The components may represent color, density, height, material properties, orientation, or internal simulation variables.
+
+The rendered result is then obtained from the parameter-space field and the surface map. For example, a color field produces
+
+$$
+C_i(u,v,t)=p_i(u,v,t)
+$$
+
+when $$p_i$$ already represents the desired color data.
+
+A geometric displacement field could instead modify the surface:
+
+$$
+\mathbf r_{\mathrm{disp}}(u,v,t)
+=
+\mathbf r(u,v)+d(u,v,t)\mathbf n(u,v),
+$$
+
+where $$d$$ is a scalar displacement and $$\mathbf n$$ is a chosen unit normal. Such an operation belongs to the rendering or surface-modification layer, not to the definition of the original domain.
+
+==== 5.2 Derived parametrizations ====
+
+A generator may construct an alternative coordinate system from the original parameters:
+
+$$
+h=h(u,v,t),\qquad k=k(u,v,t).
+$$
+
+Collect these into a map
+
+$$
+\boldsymbol\psi_t:D\longrightarrow\mathbb R^2,
+\qquad
+\boldsymbol\psi_t(u,v)=
+\begin{pmatrix}
+h(u,v,t)\\
+k(u,v,t)
+\end{pmatrix}.
+$$
+
+A pattern generated in the derived coordinates is
+
+$$
+\widetilde p_i(h,k,t).
+$$
+
+Its representation in the original coordinates is the pullback
+
+$$
+p_i(u,v,t)
+=
+\widetilde p_i\bigl(h(u,v,t),k(u,v,t),t\bigr).
+$$
+
+This is the precise mathematical meaning of generating a pattern in an alternative parametrization while keeping the original domain as the canonical domain.
+
+For example, a periodic pattern may be generated as
+
+$$
+\widetilde p(h,k)=\sin(\alpha h+\beta k),
+$$
+
+with $$h$$ and $$k$$ chosen to control its local frequency and orientation.
+
+A nonlinear coordinate transformation can create curved stripes, warped grids, or spatially varying motif densities without changing the underlying region geometry.
+
+==== 5.3 Requirements for coordinate transformations ====
+
+The map $$\boldsymbol\psi_t$$ need not always be invertible, but the engine must distinguish different cases.
+
+* If $$\det D\boldsymbol\psi_t\ne0$$, the map is locally invertible and preserves a valid local coordinate system.
+* If the determinant vanishes, the transformation can collapse directions or create singularities.
+* If the map is not injective, multiple points in the original domain may map to the same derived coordinates.
+* If a generator requires globally consistent coordinates, injectivity or explicit seam and periodicity rules may be necessary.
+
+Here,
+
+$$
+D\boldsymbol\psi_t=
+\begin{pmatrix}
+h_u & h_v\\
+k_u & k_v
+\end{pmatrix}.
+$$
+
+This flexibility should be deliberate: some patterns require valid coordinate transformations, whereas others benefit from non-injective mappings, singularities, or periodic coordinates.
+
+==== 5.4 Parameter-space geometry versus physical surface geometry ====
+
+The surface induces a metric on the parameter domain:
+
+$$
+g=
+\begin{pmatrix}
+E & F\\
+F & G
+\end{pmatrix},
+$$
+
+where
+
+$$
+E=\mathbf r_u\cdot\mathbf r_u,\qquad
+F=\mathbf r_u\cdot\mathbf r_v,\qquad
+G=\mathbf r_v\cdot\mathbf r_v.
+$$
+
+For a parameter-space curve $$\gamma(s)=(u(s),v(s))$$, its physical length is
+
+$$
+\ell(\gamma)=
+\int
+\sqrt{
+E\dot u^2+2F\dot u\dot v+G\dot v^2
+}\,ds.
+$$
+
+This matters because a grid with uniform spacing in $$u,v$$ may become compressed or stretched when mapped onto the surface.
+
+The engine should therefore offer two explicit operating modes:
+
+* **Parameter-space mode:** algorithms use distances, directions, and derivatives in $$(u,v)$$ directly.
+* **Surface-aware mode:** algorithms account for the induced metric and, where necessary, other differential-geometric quantities.
+
+The first is the default required by the specification. The second is an optional capability for patterns intended to maintain physically uniform spacing, scale, or orientation.
+
+===== 6. A unified mathematical interface for pattern generators =====
+
+The engine should not define patterns as images. It should define them as generative processes that produce states and outputs on a domain.
+
+Let $$q_i(t)$$ represent the complete internal state of region $$i$$. A general generator can be described by
+
+$$
+q_i(t+\Delta t)
+=
+\mathcal G_i
+\left(
+q_i(t),
+\Omega_i(t),
+\mathcal B_i(t),
+\theta_i,
+\xi_i
+\right).
+$$
+
+Here:
+
+* $$\Omega_i(t)$$ is the region's current domain.
+* $$\mathcal B_i(t)$$ is its boundary data and constraints.
+* $$\theta_i$$ is the generator's parameter set.
+* $$\xi_i$$ represents optional randomness or external inputs.
+* $$\mathcal G_i$$ is the method-specific evolution or generation operator.
+
+This is an abstract interface, not a claim that all methods advance in equal time steps. A static generator may execute once, a differential-equation solver may take adaptive time steps, and a cellular automaton may evolve in discrete generations.
+
+==== 6.1 Differential equations ====
+
+Differential-equation generators should be first-class components.
+
+A general system of evolution equations on a region can be written as
+
+$$
+\frac{\partial q_i}{\partial t}
+=
+\mathcal F_i
+\left(
+u,v,t,q_i,\nabla q_i,\nabla^2 q_i,\ldots
+\right).
+$$
+
+Here, $$\mathcal F_i$$ may be nonlinear and may include higher-order derivatives, coupled fields, forcing terms, and parameters.
+
+Examples include:
+
+* Reaction-diffusion systems for spots and labyrinthine patterns.
+* Advection equations for directional structures.
+* Wave equations for oscillatory fields.
+* Diffusion equations for smoothing and density evolution.
+* Phase-field equations for evolving interfaces.
+* Coupled systems producing stripes, spirals, or interacting textures.
+
+The operator must specify which derivatives are meant. They may be ordinary derivatives in parameter coordinates, or intrinsic surface operators that use the metric induced by $$\mathbf r$$.
+
+For instance, the intrinsic Laplace–Beltrami operator acting on a scalar field $$p$$ is
+
+$$
+\Delta_S p
+=
+\frac{1}{\sqrt{\lvert g\rvert}}
+\partial_a
+\left(
+\sqrt{\lvert g\rvert}\,
+g^{ab}\partial_b p
+\right),
+$$
+
+where $$\lvert g\rvert=EG-F^2$$, and repeated indices $$a,b$$ range over $$u,v$$.
+
+This distinction permits both conventional PDEs on the parameter plane and geometry-aware PDEs on curved surfaces.
+
+==== 6.2 Cellular automata ====
+
+Cellular automata require a different representation because their states are updated according to local neighborhood rules, rather than continuous differential equations.
+
+A general cellular automaton on region $$i$$ can be defined by
+
+$$
+q_i^{n+1}(a)
+=
+\Phi_i
+\left(
+\{q_i^n(b):b\in N_i(a)\},
+\theta_i
+\right),
+$$
+
+where:
+
+* $$n$$ is the discrete generation index.
+* $$a$$ is a cell or site in the computational discretization.
+* $$N_i(a)$$ is its neighborhood.
+* $$\Phi_i$$ is the local transition rule.
+
+The state may be binary, categorical, integer-valued, or vector-valued.
+
+Examples include Life-like automata, excitable-media automata, cyclic cellular automata, and custom rules for growing or dissolving structures.
+
+The engine should not require all cellular automata to use square grids. They may use triangular or hexagonal lattices, irregular meshes, graph neighborhoods, or discretizations adapted to a region's geometry.
+
+For irregular regions, the boundary treatment must specify how neighborhoods crossing the region boundary are handled.
+
+==== 6.3 Other generator classes ====
+
+The same abstract interface can support:
+
+* Vector-field integration.
+* Procedural tilings and packing algorithms.
+* Stochastic point processes.
+* Grammar-based and recursive patterns.
+* Optimization-based arrangements.
+* Particle systems.
+* Data-driven or externally supplied fields.
+* Future algorithms not yet anticipated.
+
+The shared interface should standardize domains, state, parameters, inputs, boundary interaction, and outputs—not the internal mathematics of every method.
+
+===== 7. Boundary conditions between neighboring regions =====
+
+Let regions $$i$$ and $$j$$ share a boundary segment
+
+$$
+\Gamma_{ij}(t)
+=
+\partial\Omega_i(t)\cap\partial\Omega_j(t).
+$$
+
+Boundary coupling is defined between the traces of their pattern states on this interface.
+
+For continuous fields, write
+
+$$
+q_i|_{\Gamma_{ij}},\qquad q_j|_{\Gamma_{ij}}
+$$
+
+for the boundary values approached from each side.
+
+The engine should support several classes of interface conditions.
+
+^ Condition class ^ Mathematical example ^ Intended effect ^
+| Value continuity | $$q_i=q_j$$ on $$\Gamma_{ij}$$ | Both fields meet with equal values |
+| Flux continuity | $$J_i\cdot n_i+J_j\cdot n_j=0$$ | Conserves a transported or diffusive quantity across the interface |
+| Derivative matching | $$\partial_n q_i=\partial_n q_j$$, under a specified normal convention | Controls how fields meet and vary |
+| Periodic matching | $$q_i=Aq_j+b$$ under a defined correspondence | Connects periodic or identified edges |
+| Prescribed interface values | $$q_i|_{\Gamma_{ij}}=b_{ij}$$ | Imposes a shared target pattern |
+| Soft compatibility | Minimize a boundary mismatch functional | Encourages harmony without exact equality |
+
+Here, $$J_i$$ is a flux and $$n_i$$ is the outward unit normal in the relevant domain or geometric formulation. Flux continuity is meaningful only when the state represents a quantity with a defined transport or conservation law.
+
+For purely artistic patterns, the engine may instead use geometric matching conditions or a visual compatibility objective.
+
+==== 7.1 A general coupling operator ====
+
+Rather than hard-coding a fixed list of boundary rules into the architecture, define a generic interface operator
+
+$$
+\mathcal C_{ij}
+\left(
+q_i,q_j,\Gamma_{ij},\theta_{ij}
+\right)=0.
+$$
+
+The parameter set $$\theta_{ij}$$ specifies the desired relationship between the two regions.
+
+For exact constraints, the engine seeks states satisfying $$\mathcal C_{ij}=0$$. For approximate constraints, it may minimize a penalty such as
+
+$$
+E_{\mathrm{boundary}}
+=
+\sum_{(i,j)}
+\int_{\Gamma_{ij}}
+w_{ij}\,
+\lVert \mathcal C_{ij} \rVert^2
+\,ds,
+$$
+
+where $$w_{ij}$$ controls the importance of the interface.
+
+This gives the framework both hard constraints and soft artistic preferences.
+
+A critical qualification: a boundary rule is not guaranteed to be satisfiable. Two generators may impose contradictory requirements. The engine must therefore support feasibility checks, priorities, relaxation policies, and explicit reporting of unresolved conflicts.
+
+===== 8. Coupling pattern evolution to evolving subdivisions =====
+
+The geometry of a region and the pattern inside it may evolve simultaneously. This creates a coupled dynamical system.
+
+For each active region $$i$$, let
+
+* $$\Omega_i(t)$$ be its domain;
+* $$q_i(u,v,t)$$ be its pattern state;
+* $$\phi_i(u,v,t)$$ be an optional implicit boundary representation.
+
+A general system can be expressed as
+
+$$
+\begin{aligned}
+\partial_t q_i
+&=\mathcal F_i(q_i,\Omega_i,\mathcal B_i),\\
+\partial_t\phi_i
+&=\mathcal H_i(\phi_i,q_i,\mathcal B_i),\\
+\mathcal C_{ij}(q_i,q_j,\Gamma_{ij})
+&=0.
+\end{aligned}
+$$
+
+The first equation evolves the pattern. The second evolves the region geometry. The third imposes interface relationships.
+
+This formulation allows pattern dynamics to influence geometry and vice versa.
+
+For example, a density field could cause a region to expand where density is high, or a cellular automaton could trigger the creation of a new region when a local state reaches a prescribed condition.
+
+Not every generator needs to participate in all three equations. A static geometric partition can use fixed $$\phi_i$$, and a pattern generator can ignore the boundary coupling when its method does not require it.
+
+==== 8.1 Moving-boundary equations ====
+
+If a region boundary moves with normal velocity $$V_n$$, its level-set representation can be evolved using
+
+$$
+\partial_t\phi_i
++
+V_n
+\lVert \nabla_{u,v}\phi_i \rVert
+=0.
+$$
+
+The sign convention here assumes the region is defined by $$\phi_i<0$$, with the normal pointing outward.
+
+The velocity may be prescribed or computed from the local pattern state:
+
+$$
+V_n=
+\mathcal V_i(q_i,\nabla q_i,\ldots).
+$$
+
+For instance, a curvature-dependent velocity can smooth a boundary, while a pattern-dependent velocity can produce growth, contraction, or deformation.
+
+However, independently moving all region boundaries can break the partition. A production implementation must coordinate their motion, maintain shared interfaces, and resolve topology changes rather than treating every level-set equation in isolation.
+
+==== 8.2 Three different clocks ====
+
+The framework should distinguish three notions of time:
+
+1. **Geometric time:** when regions deform, split, merge, appear, or disappear.
+2. **Pattern time:** when a PDE, automaton, or other generator updates its state.
+3. **Rendering time:** when the current state is displayed or exported.
+
+These clocks need not advance at the same rate. A PDE may take many numerical steps between rendered frames; a partition may change topology only occasionally; a cellular automaton may update at a fixed generation interval.
+
+This separation is important for performance, reproducibility, and asynchronous generation methods.
+
+===== 9. Numerical representation and computation =====
+
+The mathematical model is continuous where appropriate, but the software must eventually represent and compute with finite data.
+
+The architecture should distinguish the mathematical model from its numerical discretization.
+
+Possible representations include:
+
+^ Mathematical object ^ Possible numerical representation ^
+| Parameter domain | Rectangle, polygonal domain, or domain mesh |
+| Surface map $$\mathbf r$$ | Analytic function, spline, sampled surface, or mesh |
+| Region boundary | Polygon, spline, level set, or mesh boundary |
+| Continuous pattern field | Grid, finite-element field, spectral representation, or adaptive mesh |
+| Cellular automaton | Lattice, graph, mesh, or other discrete neighborhood structure |
+| Region adjacency | Graph or cell-complex incidence structure |
+| Boundary constraints | Discrete matching equations, interface operators, or penalty terms |
+
+A generator should not have to know how the final image is rasterized, and the renderer should not have to know which PDE or cellular-automaton rule produced a field.
+
+For numerical PDEs on moving regions, the engine must also decide how to handle remeshing, interpolation, conservation, and state transfer. These are method-specific concerns that belong behind the common interfaces.
+
+For continuous regions, exact boundary satisfaction may be possible analytically, but it is generally only approximate in a discretized numerical implementation. The engine should distinguish mathematical tolerances from rendering tolerances.
+
+===== 10. Generality through mathematical abstractions =====
+
+To support future methods, the engine should avoid making any particular region representation, field type, or solver the universal standard.
+
+A suitable architecture has the following conceptual layers.
+
+**Surface geometry**
+
+Parameter domain $$D$$, embedding $$\mathbf r$$, metric $$g$$
+
+**Partition and topology**
+
+Regions, boundaries, adjacency, lifecycles, split and merge events
+
+**Pattern generators**
+
+PDEs, cellular automata, vector fields, tilings, stochastic and future methods
+
+**Constraint and evolution system**
+
+Boundary coupling, time integration, topology coordination, state transfer
+
+**Evaluation and output**
+
+Surface mapping, visualization, rasterization, vector export, geometry export
+
+The arrows represent information exchange, not necessarily a one-way execution sequence. For example, a pattern generator may influence region evolution, and the constraint system may feed corrected boundary data back into the generators.
+
+The core abstractions should be defined by mathematical capabilities rather than specific algorithms:
+
+* A **domain** defines where a process is valid.
+* A **field** assigns values to points or discrete sites.
+* An **evolution operator** updates a field or state.
+* A **region** defines a time-dependent subset of the parameter domain.
+* An **interface** defines the relationship between adjacent regions.
+* A **constraint** specifies an admissibility condition or objective.
+* A **discretization** provides a numerical representation.
+* A **solver** computes an evolution or constraint solution.
+* An **event** records a change in topology or lifecycle.
+
+This design permits future extensions without requiring the core engine to know the internal implementation of each method.
+
+===== 11. Consolidated mathematical specification =====
+
+The central system can now be summarized as follows.
+
+The physical object is a parametrized surface
+
+$$
+\mathbf r:D\to\mathbb R^3,
+\qquad
+D\subseteq\mathbb R^2.
+$$
+
+Its active subdivisions form a time-dependent partition
+
+$$
+\mathcal P(t)=\{\Omega_i(t):i\in I(t)\}.
+$$
+
+Each region has a geometric state, an optional internal pattern state, and a configurable generator:
+
+$$
+q_i(t+\Delta t)
+=
+\mathcal G_i
+\left(
+q_i(t),
+\Omega_i(t),
+\mathcal B_i(t),
+\theta_i,
+\xi_i
+\right).
+$$
+
+Regions may be represented using implicit functions, explicit boundaries, meshes, or other suitable mathematical structures. Their geometry and topology may evolve independently or in response to the generated patterns.
+
+Patterns are defined in the original coordinates $$(u,v)$$, with optional derived coordinates
+
+$$
+(h,k)=\boldsymbol\psi_t(u,v).
+$$
+
+The pattern framework supports continuous differential equations, discrete cellular automata, and other generative processes. Interfaces between regions impose configurable hard or soft compatibility conditions.
+
+Finally, the resulting fields and geometric states are mapped through the surface parametrization for visualization and export.
+
+The essential design principle is that the engine's mathematical core describes evolving geometric domains, fields, and interface relationships—not any one particular pattern algorithm.
+
+This is the level of abstraction needed for a general system that can begin with planar patterns and later support evolving subdivisions on curved surfaces, mixed generator types, and more complex geometric or dynamical models.
+
+One final mathematical decision should be made before implementation: whether the initial version requires a strictly conforming partition at every time instant, including topology-change events, or permits temporary gaps, overlaps, and unresolved interfaces during numerical evolution. The former provides stronger geometric guarantees; the latter can simplify some algorithms but requires explicit rules for intermediate states and their interpretation.

@@ -1,0 +1,145 @@
+====== Implementation roadmap ======
+
+===== Objective =====
+
+Implement PatternSurface as a modular C++20/Linux application whose mathematical core can support evolving partitions of a parametrized surface, heterogeneous pattern generators, and boundary constraints. Build the project in vertical slices, keeping every stage compilable and testable.
+
+===== Delivery strategy =====
+
+The order is chosen to validate the most consequential abstractions early. First establish the mathematical contracts and build system. Then make geometry and shared-boundary topology reliable. Next prove that independent generators can operate on regions. Only then add cross-boundary coupling, heavier numerical methods, evolving topology, and full editor workflows.
+
+Do not attempt to implement every extension in the first release. Do not begin with a universal PDE framework, unrestricted scripting, or binary plugin ABI. Provide stable extension points and implement specific well-tested capabilities.
+
+===== Phase 0 — Foundation and contracts =====
+
+**Purpose:** create a reliable repository and define public interfaces before algorithmic work expands.
+
+Tasks:
+  - Establish CMake presets for Debug, Release, and sanitizer builds.
+  - Create targets for core, geometry, numerics, rendering, UI, CLI, and tests, even if some are initially thin.
+  - Define project-wide naming, error handling, identifiers, units, coordinate conventions and ownership rules.
+  - Define first versions of Domain2, SurfacePatch, RegionId, generator descriptors, boundary descriptors, project versioning, and diagnostic types.
+  - Set up automated tests and a minimal CLI that reports version/build information.
+  - Document third-party dependency and license decisions.
+
+**Exit criteria:** clean configure/build on a documented Linux environment; unit tests run from the build system; no public core header requires Qt or a geometry-backend type.
+
+===== Phase 1 — Surface geometry and valid partition =====
+
+**Purpose:** prove the parameter-domain and shared-boundary model before adding complex generators.
+
+Tasks:
+  - Implement the parameter domain and plane/cylinder surface patches.
+  - Implement robust 2D geometry operations behind an adapter.
+  - Implement a shared-edge planar subdivision representation, stable region IDs, adjacency queries and partition validation.
+  - Support creating, splitting, merging and deleting regions as validated transactions.
+  - Implement a minimal diagnostic 2D view or a deterministic geometry export to inspect results; do not block the core on full UI polish.
+  - Add boundary and topology invariant tests.
+
+**Exit criteria:** test partitions cover the domain under the chosen coverage policy; shared edges are represented once and referenced by adjacent faces; invalid edits fail atomically; the plane and cylinder map correctly.
+
+===== Phase 2 — Generator API and first visual output =====
+
+**Purpose:** demonstrate that different regions can use independent methods through one stable runtime interface.
+
+Tasks:
+  - Define generator lifecycle, context objects, method capabilities, typed outputs, deterministic random state, and generator configuration schema.
+  - Implement a vector-field curve generator.
+  - Implement identity and user-defined derived coordinate maps (u,v) -> (h,k).
+  - Implement output clipping/evaluation within region domains without making the renderer part of the generator.
+  - Add project save/load for the supported subset and a simple render/export path.
+
+**Exit criteria:** a single project can assign different vector-field parameters and transforms to adjacent regions; results are repeatable from project plus seed; generators do not depend on GUI types.
+
+===== Phase 3 — Boundary compatibility =====
+
+**Purpose:** enforce and diagnose relationships between neighboring patterns.
+
+Tasks:
+  - Define shared interface contexts and typed boundary-policy descriptors.
+  - Implement at least endpoint continuity, tangent/direction matching where appropriate, and one soft compatibility objective.
+  - Add capability checking so unsupported combinations are rejected with useful diagnostics.
+  - Define hard-constraint tolerances, soft-objective values, priorities, and infeasibility reporting.
+  - Add cross-boundary regression tests.
+
+**Exit criteria:** compatible neighbors satisfy declared tests within tolerance; contradictory or unsupported constraints return an explicit failure or warning and never silently mutate a hard constraint.
+
+===== Phase 4 — Numerical generators =====
+
+**Purpose:** introduce continuous and discrete dynamical fields without coupling them to the GUI.
+
+Tasks:
+  - Define discretization and field abstractions separate from output geometry.
+  - Implement triangular parameter-space meshes for PDE fields.
+  - Implement a simple reaction-diffusion PDE system and a documented starter time integrator.
+  - Implement cellular automata using a neighborhood abstraction, first on a regular lattice.
+  - Define supported boundary behavior, state initialization, numerical diagnostics and reproducibility semantics.
+  - Add mesh refinement/convergence or known-answer tests where applicable.
+
+**Exit criteria:** PDE and cellular-automaton generators run headlessly on a region; numerical limitations are documented; each generator declares compatible boundary policies and discretizations.
+
+===== Phase 5 — Time-dependent regions =====
+
+**Purpose:** evolve geometry and topology while keeping the partition valid at committed states.
+
+Tasks:
+  - Add simulation time, event queue/history, region lifecycles, and moving-boundary representation.
+  - Implement explicit create, delete, split, and merge events as atomic transactions.
+  - Define generator-specific state transfer during region changes.
+  - Coordinate shared-boundary motion so adjacent regions cannot independently diverge along the same edge.
+  - Add deterministic replay and timeline regression tests.
+  - Treat level-set evolution as an optional later method whose extracted boundaries are reconciled with the authoritative partition.
+
+**Exit criteria:** scripted sequences of motion and topology events preserve configured partition invariants; invalid events roll back; event replay produces equivalent geometry/state within specified tolerances.
+
+===== Phase 6 — Desktop editor, rendering and CLI workflow =====
+
+**Purpose:** deliver a usable authoring workflow without moving domain logic into the GUI.
+
+Tasks:
+  - Implement Qt desktop shell, parameter-space editor, region/property inspector, 3D preview and simulation controls.
+  - Add project tree, boundary-policy editing, timeline/events panel, and diagnostics panel.
+  - Implement a CLI for validation, simulation and export using the same core library.
+  - Add raster output and vector output where supported by output type.
+  - Verify that GUI and CLI consume the same project model and generator implementations.
+
+**Exit criteria:** a user can create/edit a project, run it, save/reopen it, and export a result; the CLI can validate and render a project without launching a GUI.
+
+===== Phase 7 — Advanced extension capabilities =====
+
+**Purpose:** broaden generality after the initial contracts have proved themselves.
+
+Candidate additions:
+  - Multiple surface charts and seam correspondence.
+  - Level-set boundary evolution and adaptive contour extraction.
+  - Spline/implicit boundary geometry and additional mesh backends.
+  - Implicit/semi-implicit PDE solvers and adaptive time stepping.
+  - More spatial point processes, tilings, recursive patterns and optimization-based generators.
+  - Optional GPU acceleration after profiling.
+  - External plugin ABI or scripting once the generator API is stable.
+  - Additional export targets and fabrication-specific geometry checks.
+
+**Exit criteria:** every new method uses existing domain, interface, lifecycle and diagnostic contracts, or any required contract changes are versioned and documented.
+
+===== Cross-phase engineering rules =====
+
+  - Every phase ends with a successful build and test run.
+  - Each phase implements only the minimum functionality needed for its exit criteria.
+  - Keep numerical code deterministic where practical and make random seeds explicit.
+  - Do not hide geometry or solver failures behind clipping or rendering fallbacks.
+  - Third-party dependencies are wrapped behind adapters where feasible.
+  - Public APIs and project-file schema changes require documentation and tests.
+  - Update the decisions page when a previously open question is resolved.
+
+===== Milestone tracking template =====
+
+For each phase, record:
+  * Implemented scope.
+  * Files and targets changed.
+  * Build commands and results.
+  * Tests added and results.
+  * Known limitations.
+  * Any deviation from requirements and why it was necessary.
+  * Recommended next phase.
+
+See the separate `prompts/` directory for coding prompts aligned with these phases.

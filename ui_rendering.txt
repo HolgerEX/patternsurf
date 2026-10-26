@@ -1,0 +1,44 @@
+====== GUI, rendering and export ======
+
+===== UI architecture =====
+
+Build a Qt 6 desktop application, but keep Qt dependencies in the UI/application targets. A headless core and CLI must remain usable without a window server or OpenGL context.
+
+Suggested workspace:
+  * parameter-space canvas (canonical view of region geometry and patterns);
+  * 3D surface viewport (evaluates the surface map and displays output on the object);
+  * region/project tree;
+  * property inspector for surface, region, generator, coordinate map and boundary policy;
+  * timeline and topology-event list;
+  * diagnostics panel for geometry validation, constraint residuals and solver errors.
+
+===== Initial interaction scope =====
+
+Users should be able to create/open/save a project; choose the surface; draw, select and move partition boundaries; split and merge regions; assign generator types and parameters; configure boundary policies; run/pause/step/reset; scrub simulation time; inspect failed conditions; and export supported output.
+
+The parameter-space view is canonical. Editing in 3D, if added, must map selections/actions back to parameter coordinates using a defined picking/inverse-mapping method and handle ambiguous inverse mappings.
+
+===== Rendering pipeline =====
+
+Rendering consumes immutable snapshots or safe handles and produces display/export representations. It must not mutate authoritative geometry or simulation state. Cache generated meshes/textures where helpful, with explicit invalidation keyed to model/snapshot revisions.
+
+Surface visualization tessellates the parameter domain and evaluates r(u,v) at samples. Pattern output is evaluated in parameter coordinates and then mapped to the surface. The render path should distinguish parameter-space line width/spacing from screen-space or physical surface-space width/spacing.
+
+Use Qt's OpenGL integration for the 3D viewport, but retain a CPU/headless path for export and automated tests. Renderer failure must not prevent project validation or non-OpenGL export.
+
+===== Export =====
+
+Initial export targets:
+  * PNG or another supported raster format for rendered images;
+  * SVG for output types that can be represented accurately as vector geometry;
+  * structured mesh/scene export as a later explicit feature.
+
+Do not promise SVG for arbitrary continuous fields without a defined rasterization/vectorization rule. Embed or reference enough metadata to record the project/generator settings when useful for reproducibility.
+
+===== CLI =====
+
+Provide a CLI using the same project and simulation library. Initial commands should include help/version, validate-project, render/export, and simulate-to-time. Define nonzero exit codes for invalid project, unsupported generator, geometry error, solver failure and export error. Emit useful diagnostics to stderr and machine-readable output when requested.
+
+===== UI state versus project state =====
+
+Separate persistent project/model state from ephemeral UI state such as panel layout, selection, camera view and open inspector. Save UI preferences separately or in a clearly versioned optional section. Undo/redo should call model commands/transactions rather than directly editing widget state.

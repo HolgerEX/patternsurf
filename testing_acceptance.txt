@@ -1,0 +1,56 @@
+====== Testing and acceptance ======
+
+===== Test layers =====
+
+**Unit tests:** coordinate maps, derivatives, vector/matrix operations, IDs, parameter validation, boundary residual calculations and serialization helpers.
+
+**Geometry tests:** regularity, domain validity, intersections, edge/twin consistency, non-overlap, coverage policy, adjacency, and transactional topology edits.
+
+**Numerical tests:** known analytical solutions where possible, manufactured solutions, convergence as resolution changes, timestep stability checks, deterministic CA generations and remapping behavior.
+
+**Integration tests:** load a project, construct surface/partition/generators, advance simulation, enforce boundary policies, serialize/reload and compare the final state.
+
+**UI tests:** keep the first priority on core behavior and test UI actions that issue model commands; avoid making pixel-level screenshots the only correctness test.
+
+===== Acceptance gates by phase =====
+
+^ Phase ^ Required evidence ^
+| 0 Foundation | documented configure/build/test commands work from a clean checkout; core headers are GUI-independent |
+| 1 Geometry/partition | invariants validated; shared boundaries consistent; invalid transactions roll back |
+| 2 Generator API | different generators/configurations run in adjacent regions; output repeatable from fixed inputs |
+| 3 Constraints | exact and soft policies produce measured results; infeasibility is explicit |
+| 4 Numerics | PDE and CA known-answer tests pass; solver limits/failures are reported |
+| 5 Dynamics | event replay is deterministic within defined tolerances; partition valid at every committed state |
+| 6 Application | GUI workflow and headless CLI use the same core; save/load/export integration passes |
+| 7 Extensions | extension uses documented APIs; backward compatibility and regression tests updated |
+
+===== Geometry invariants =====
+
+Do not rely only on rendered inspection. For each committed partition test:
+  - boundary cycles close correctly;
+  - all shared-edge references agree;
+  - face geometry is non-degenerate;
+  - intersections/overlaps meet the supported geometry policy;
+  - coverage matches the selected domain policy;
+  - adjacency and interface records agree;
+  - transaction failure leaves the original state unchanged.
+
+Use scale-aware tolerances and test geometries of different extents. Include near-degenerate inputs and malformed project files.
+
+===== Numerical acceptance =====
+
+For PDE solvers, document the equation, discretization, boundary conditions, integrator and stability limitations. Compare against analytical/manufactured solutions where feasible and test convergence rather than relying on a visually plausible image. Track non-finite values and convergence failure.
+
+For cellular automata, test exact state arrays after known generations, including boundary-neighbor cases and update-order semantics. For stochastic generators, use fixed seeds and test stated reproducibility guarantees.
+
+===== Quality gates =====
+
+Every coding phase must leave the project in a building, testable state. Before phase completion:
+  - run formatting/static checks selected by the project;
+  - build Debug and at least one optimized configuration where feasible;
+  - run all relevant tests;
+  - inspect git diff for unrelated changes, accidental generated files and unfinished TODOs;
+  - document commands and results accurately;
+  - record known limitations instead of claiming unsupported behavior.
+
+A failing test may be accepted temporarily only if its cause, scope, and follow-up are explicitly documented and it does not invalidate the phase's core acceptance criteria.

@@ -1,0 +1,61 @@
+====== Partition geometry and topology ======
+
+===== Authoritative first-release representation =====
+
+Represent the parameter-space partition as a planar cell complex, implemented with a DCEL or equivalent half-edge structure. Faces represent regions, and shared boundaries are single topological entities referenced by both adjacent faces. A face is not allowed to own a private conflicting copy of a shared edge.
+
+Core entities:
+  * `RegionId`: stable identifier for a region over its lifecycle.
+  * vertex: parameter-space point (u,v).
+  * half-edge: oriented edge with twin, origin/target, incident face and next/previous relations as supported by the chosen DCEL design.
+  * edge/interface: identity for the shared geometric boundary and its policy metadata.
+  * face/region: oriented boundary cycles, region metadata and lifecycle state.
+  * adjacency graph: derived or maintained relation among regions sharing an interface.
+
+Select a geometry backend after validating operations required by the project and reviewing licenses. Hide backend-specific types behind an adapter. The backend must support the intended edit operations and validation strategy; a simple polygon list without shared-edge semantics is insufficient as the authoritative model.
+
+===== Invariants =====
+
+A committed partition must pass configured invariants:
+  - Each active face has valid, non-degenerate boundary cycles.
+  - Half-edge/twin and cycle references are consistent.
+  - Shared interfaces have consistent geometry and identity.
+  - Face interiors do not overlap except where overlap is explicitly part of another representation.
+  - Coverage matches the configured policy: full coverage, coverage plus background region, or explicitly allowed gaps.
+  - Region adjacency agrees with shared interfaces.
+  - Stable IDs are unique and references point to live or explicitly historical entities.
+  - No committed operation leaves dangling topology references.
+
+A topology validator should produce structured diagnostics that identify the entity and failed invariant.
+
+===== Transactional edits =====
+
+All topology changes go through the partition manager. A transaction builds a candidate edit, validates it, and either commits it atomically or leaves the old state unchanged. Generators and UI tools submit commands/events; they do not mutate half-edge records directly.
+
+Required operations in the first release: create region, split region, merge neighboring regions, delete region according to coverage policy, move boundary vertex/control point, and possibly insert/remove a boundary segment. Each operation must define how shared edges, IDs, adjacency, labels and policies are updated.
+
+===== Geometry versus topology =====
+
+Continuous deformation changes geometric coordinates while preserving connectivity. A split, merge, birth, death, or adjacency change is a discrete topology event. Do not infer stable identities solely from transient mesh indices.
+
+A moving shared edge must be updated once by the partition/boundary manager. Its incident faces observe the same edge trajectory. A proposal that would invert a face, self-intersect a boundary, violate required coverage, or conflict with a locked condition must be rejected or routed through an explicitly configured repair policy.
+
+===== Lifecycles and events =====
+
+Each active region may have a birth time and an optional death time. Events include:
+  * `RegionCreated`
+  * `RegionDeleted`
+  * `RegionSplit`
+  * `RegionsMerged`
+  * `BoundaryMoved`
+  * `AdjacencyChanged`
+
+Events record time, entity IDs, parameters, parent/child relationships, and state-transfer policy. Define event ordering for events at the same simulation time, and persist it for replay.
+
+===== State transfer =====
+
+The partition layer reports lifecycle changes; each generator decides how its state transfers, subject to a declared policy. Candidate policies include reset, copy, spatial resampling, parent-child inheritance, merge aggregation, or generator-defined transfer. The choice must be deterministic where possible and recorded in project data.
+
+===== Level sets and alternative representations =====
+
+Level sets are useful for evolving boundaries and topology changes, but independent level sets do not preserve a partition automatically. Treat level-set contours as a proposed geometry state. Convert, reconcile and validate them before committing to the authoritative cell complex. A later version may support other authoritative representations if their invariants and cross-generator interfaces are documented.

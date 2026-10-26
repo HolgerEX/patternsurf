@@ -1,0 +1,59 @@
+====== Requirements and scope ======
+
+===== Product goal =====
+
+PatternSurface generates visually coherent patterns on a parametrized surface whose parameter domain is subdivided into time-dependent regions. Each region may use a different pattern-generation process, while shared boundaries can impose relationships between adjacent processes.
+
+===== Required mathematical behavior =====
+
+  - The ambient space is R^3.
+  - A surface patch is represented by r:D->R^3, with D a subset of R^2.
+  - A plane is represented as a valid special case of the surface abstraction.
+  - The original parameter coordinates (u,v) are the canonical coordinates for subdivision and pattern generation.
+  - Pattern generators may define derived coordinates (h,k)=psi(u,v,t).
+  - A partition may contain arbitrary supported regions, shared boundaries and adjacency relationships.
+  - Region geometry may move continuously.
+  - Regions may be created, destroyed, split, and merged through explicit lifecycle events.
+  - Pattern methods may have continuous-time, discrete-time, static, or stochastic behavior.
+  - Boundary conditions are configurable by interface and may be exact or soft.
+  - Parameter-space operators and intrinsic surface operators must be distinguishable.
+  - Geometry, field state, topology, constraints, numerical discretization and rendering must remain separate concepts.
+
+===== First-release functional requirements =====
+
+  - Surface definitions: plane and cylinder; interface permits future patches.
+  - Partition: create and edit regions; query adjacency; validate geometry; perform transactional split/merge/delete operations.
+  - Patterns: vector-field curves, one reaction-diffusion PDE generator, and one cellular automaton.
+  - Constraints: support at least one exact geometric condition and one soft compatibility objective; detect unsupported or contradictory policies.
+  - Dynamics: controlled boundary motion and scripted topology events with state-transfer policies.
+  - Coordinate maps: identity and configurable mapping to (h,k), including validity/capability checks.
+  - UI: edit parameter-space geometry, inspect regions and parameters, preview in 3D, control simulation, inspect errors.
+  - CLI: validate, simulate and export without GUI startup.
+  - Persistence: versioned project format and reproducible random seeds.
+  - Testing: unit, geometry invariant, numerical and integration coverage.
+
+===== Non-functional requirements =====
+
+  - C++20 on Linux.
+  - CMake-based reproducible builds.
+  - Headless core library; no Qt dependency from core public headers.
+  - Stable IDs and explicit ownership; no ambiguous pointer lifetime across topology changes.
+  - Useful diagnostics for invalid input, solver failure, infeasible constraints and unsupported generator combinations.
+  - Testable abstractions and deterministic behavior where practical.
+  - Third-party licenses reviewed before distribution.
+  - Avoid premature GPU dependence; CPU execution is the initial baseline.
+
+===== Explicitly deferred =====
+
+  - Full arbitrary-surface atlas simulation.
+  - Universal solver that can automatically solve any PDE.
+  - Arbitrary scripting language and external binary plugin ABI.
+  - Guaranteed exact geometry for every conceivable implicit or fractal boundary.
+  - GPU compute as a requirement.
+  - Manufacturing/fabrication certification.
+
+Deferred items should remain possible through abstractions but are not acceptance criteria for the first release.
+
+===== Design constraints =====
+
+The partition representation must preserve shared-boundary identity. Generators cannot directly mutate the authoritative topology; they request changes through the partition/event API. Rendering must never define the authoritative geometry. A numerical grid is a discretization of the mathematical domain, not the domain itself.

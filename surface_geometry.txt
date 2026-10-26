@@ -1,0 +1,59 @@
+====== Surface geometry and coordinate maps ======
+
+===== SurfacePatch contract =====
+
+Each surface patch provides:
+  * its parameter domain and domain-boundary semantics;
+  * evaluation r(u,v);
+  * first derivatives r_u and r_v, analytically or numerically with documented accuracy;
+  * optional second derivatives and normal computation;
+  * optional inverse mapping from a physical point to a parameter point;
+  * regularity and singularity metadata;
+  * optional periodic/seam metadata.
+
+The core should not assume every patch is globally injective or has an inverse. Methods that require an inverse must query the capability and report failure when absent.
+
+===== Built-in patches =====
+
+**Plane:** r(u,v)=(u,v,0), with rectangular domain initially. This is the baseline for domain and numerical tests.
+
+**Cylinder patch:** one possible parametrization is r(u,v)=(R cos(u), R sin(u), v), with R>0 and an explicitly defined range for u. If the domain includes equivalent angular endpoints, represent the wraparound as a seam identification rather than accidentally treating it as two unrelated external boundaries.
+
+**Custom patch:** developers can provide another implementation without modifying partition or generator code, provided it meets the regularity and domain contracts.
+
+===== Parameter-domain geometry =====
+
+Use a dedicated Domain2 abstraction for the supported subset of R^2. Initially support a rectangle and polygonal domains. Validate coordinates, orientation, degeneracy, tolerance and domain-boundary behavior. Avoid silently assuming that all domains are [0,1]^2.
+
+===== Induced metric =====
+
+Compute the first fundamental form from tangent vectors. Check the determinant |g| for positivity and conditioning before using inverse-metric operations. Surface-aware operations must return a diagnostic for singular or poorly conditioned regions rather than emitting NaN values.
+
+===== Coordinate maps =====
+
+A CoordinateMap2D evaluates psi_t(u,v)=(h,k). Its declared capabilities may include:
+  * time dependence;
+  * Jacobian evaluation;
+  * inverse evaluation;
+  * local or global invertibility guarantees;
+  * periodicity and seam relationships;
+  * domain restrictions.
+
+At minimum implement identity mapping and a configurable affine map. A nonlinear custom map can follow. Do not require inversion unless the consuming algorithm needs it. When estimating transformed feature sizes or derivatives, use the Jacobian and document singularity behavior.
+
+===== Coordinate conventions =====
+
+Choose one consistent convention for:
+  * parameter orientation and boundary traversal;
+  * angle units (use radians internally);
+  * length units (surface coordinates use caller-declared units or dimensionless units);
+  * simulation time and time units;
+  * floating-point tolerance policies.
+
+Avoid global fixed tolerances. Geometric operations should use scale-aware tolerances derived from the domain extent and operation needs.
+
+===== Surface tessellation and visualization =====
+
+Rendering samples the patch and evaluates r on a tessellation of the parameter domain. Tessellation is an approximation for visualization, not the authoritative surface definition. Track the relationship between parameter-space vertices and rendered vertices so patterns can be evaluated in (u,v).
+
+A future multi-chart SurfaceAtlas must provide chart IDs, transition maps, overlap/identification rules and seam correspondence. It should be introduced before any implementation claims global support for sphere-like surfaces with chart singularities.

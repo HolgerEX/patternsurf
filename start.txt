@@ -1,0 +1,49 @@
+====== PatternSurface Engine ======
+
+PatternSurface is a general-purpose procedural pattern engine for evolving regions on parametrized surfaces. The implementation target is **Linux + C++20**, with a standalone core library, a headless command-line program, and a Qt desktop editor.
+
+The mathematical foundation is a two-dimensional parameter domain embedded into three-dimensional space by a surface map:
+
+<code>
+r(u,v) = (x(u,v), y(u,v), z(u,v)),  (u,v) in D subset R^2.
+</code>
+
+Partitions and patterns are defined in the original parameter coordinates (u,v). A region may have its own pattern generator, dynamic state, coordinate transform, and boundary policies. Regions may move, appear, disappear, split, and merge over time.
+
+===== How to use this documentation =====
+
+Read the pages in this order:
+
+  * [[patternsurface:roadmap|Implementation roadmap]] — project stages and completion gates.
+  * [[patternsurface:requirements|Requirements and scope]] — what the first release must do.
+  * [[patternsurface:architecture|System architecture]] — modules and dependency direction.
+  * [[patternsurface:mathematical_model|Mathematical model]] — domains, fields, geometry, time and notation.
+  * [[patternsurface:surface_geometry|Surface geometry]] — parametrizations, metrics and coordinate maps.
+  * [[patternsurface:partition_topology|Partition and topology]] — regions, shared boundaries and lifecycle events.
+  * [[patternsurface:pattern_generators|Pattern generators]] — generator contracts and method families.
+  * [[patternsurface:boundary_constraints|Boundary constraints]] — exact and soft coupling of neighbors.
+  * [[patternsurface:simulation_numerics|Simulation and numerical methods]] — PDEs, cellular automata and time stepping.
+  * [[patternsurface:ui_rendering|GUI, rendering and export]] — Qt application and render paths.
+  * [[patternsurface:project_serialization|Project format and serialization]] — persistence and reproducibility.
+  * [[patternsurface:testing_acceptance|Testing and acceptance]] — test strategy and release gates.
+  * [[patternsurface:build_conventions|Build and coding conventions]] — Linux/CMake workflow and implementation rules.
+  * [[patternsurface:decisions_open_questions|Decisions and deferred questions]] — fixed choices and topics intentionally left open.
+
+Coding handoff prompts are supplied separately in the `prompts/` directory. Use the master prompt first, then send one phase prompt at a time.
+
+===== Core principles =====
+
+  - **Parameter domain first:** (u,v) is the canonical domain for subdivisions and pattern generation.
+  - **3D surface always:** the main object is a parametrized surface r(u,v); a plane is a special case.
+  - **Shared boundaries:** adjacent regions reference the same interface entity, not duplicate independent copies.
+  - **Topology is explicit:** region creation, deletion, splitting and merging are events validated by a partition manager.
+  - **Generator independence:** PDEs, cellular automata, geometric patterns and future methods implement a common lifecycle but retain method-specific state and mathematics.
+  - **Boundary-aware composition:** boundary policies are explicit, typed, testable, and checked for compatibility.
+  - **Core without GUI dependency:** the mathematical and simulation library must work headlessly.
+  - **Incremental delivery:** each implementation phase must build and pass tests before the next phase begins.
+
+===== First-release definition =====
+
+The first usable release can define a plane or cylinder patch, partition its parameter domain, assign vector-field, PDE and cellular-automaton generators to regions, configure boundary behavior, evolve geometry through validated events, display a 2D parameter-space view and a 3D surface view, save/load projects, and export static results through both GUI and CLI.
+
+See [[patternsurface:roadmap|Implementation roadmap]] for the ordered plan and acceptance gates.

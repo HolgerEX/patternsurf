@@ -1,0 +1,74 @@
+====== Pattern generators ======
+
+===== Design goal =====
+
+A generator is a process that initializes, advances, evaluates and persists a pattern state over a region. It is not required to output an image. It may output fields, curves, points, discrete states, meshes or other typed pattern primitives.
+
+The common interface should standardize lifecycle and interoperability while retaining method-specific mathematical semantics.
+
+===== Generator descriptor =====
+
+Each generator type should expose a stable serialized type ID and descriptor containing:
+  * human-readable name and schema version;
+  * parameter schema, defaults, ranges and units;
+  * state/time model: static, continuous-time, discrete-time, event-driven, stochastic or mixed;
+  * supported output kinds;
+  * required discretization and geometry capabilities;
+  * supported boundary-policy kinds;
+  * determinism/reproducibility declaration;
+  * topology-change and state-transfer capabilities;
+  * validation and diagnostic hooks.
+
+Do not serialize C++ class names or raw object memory.
+
+===== Lifecycle =====
+
+Conceptual lifecycle:
+  1. construct from a stable type ID and parameters;
+  2. validate parameters and context capabilities;
+  3. initialize state on a region/domain;
+  4. prepare for a step using immutable snapshots of relevant geometry/interface data;
+  5. advance according to the generator's own time semantics;
+  6. evaluate typed pattern output;
+  7. react to committed lifecycle/topology events through a state-transfer hook;
+  8. serialize state/configuration if persistence requires it;
+  9. release resources.
+
+Use typed contexts instead of an ever-growing list of positional parameters. Contexts must clarify mutability, lifetime and units. A generator may request topology changes, but it must not directly mutate the authoritative partition.
+
+===== Typed output =====
+
+Support output categories through a variant, registry, or type-erased interface with explicit type IDs. Initial categories:
+  * scalar/vector/multichannel field;
+  * curves and polylines;
+  * points and repeated geometric motifs;
+  * discrete site/cell states;
+  * mesh or height-like data where needed.
+
+The renderer maps output to color, curves, geometry or textures. Keep internal simulation state separate from evaluated output and from render caches.
+
+===== Generator A: vector field =====
+
+Integrate curves through a direction/vector field defined in parameter coordinates. Parameters may control sources, curl/noise, spacing, integration step, maximum length, seed and termination rules. Output is a set of curves clipped/terminated according to the region and boundary policy. This is the first generator because it gives visible output without requiring a PDE discretization.
+
+Boundary interactions may include matched endpoints, prescribed crossing positions, tangent alignment, and controlled termination. Define how a curve crossing an interface finds a corresponding continuation in the neighboring region; do not assume equal local parameters imply compatible field directions unless explicitly intended.
+
+===== Generator B: PDE =====
+
+Use a field state defined on a discretization of the region. A reaction-diffusion system is a starter example. The generator delegates discretization and time integration to numerical interfaces, declares required operators and boundary conditions, and reports stability/convergence failures.
+
+===== Generator C: cellular automaton =====
+
+Use a discrete state and neighborhood rule. The automaton declares its lattice/site model, update ordering (synchronous or asynchronous), neighborhood, state alphabet and cross-region neighbor semantics. Its integer generation count may map to simulation time by a declared clock policy.
+
+===== Generator D: stochastic point distribution =====
+
+Generate points or primitives using a specified random engine and saved seed/state. Support spatial density and minimum spacing as later additions. Randomness must be reproducible from project settings under a declared software/version policy; do not claim cross-platform bit-identical output unless the RNG and floating-point behavior make that guarantee real.
+
+===== Coordinate transforms =====
+
+Generators may request a derived-coordinate map (h,k)=psi(u,v,t). The map belongs to the surface/coordinate subsystem or generator configuration, not to an ad hoc renderer transform. The generator must state if it needs an inverse, Jacobian, local invertibility, periodicity or a nonsingular metric.
+
+===== Registration and extension =====
+
+Initially register built-in generators through a compiled-in factory registry. Keep a stable serialized ID separate from source file/class names. External plugins and scripting are deferred until the lifecycle, error and versioning contracts have survived the first release.

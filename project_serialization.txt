@@ -1,0 +1,49 @@
+====== Project format and serialization ======
+
+===== Goals =====
+
+The project format must be inspectable, versioned, validated and independent of C++ object layout. JSON is the initial choice for project metadata and generator configuration. Large caches or sample arrays may later use binary sidecar files with explicit versioning.
+
+===== Top-level project document =====
+
+A project should conceptually include:
+  * format/schema version;
+  * project metadata and units;
+  * surface patches and parameter domains;
+  * coordinate maps and chart/seam relationships where applicable;
+  * partition vertices, edges, faces, stable IDs and adjacency;
+  * region generator IDs, configuration and required state;
+  * boundary policies and priorities;
+  * timeline, topology events and transfer policies;
+  * random seeds/RNG state where needed;
+  * rendering/export settings;
+  * optional provenance/build metadata.
+
+Avoid duplicating derived data unless useful as a cache. If derived adjacency is serialized for speed, validate or rebuild it on load. Never serialize raw pointers, C++ type names as identity, or third-party object memory.
+
+===== Schema migration =====
+
+Define `format_version` from the first saved project. Each incompatible schema change requires a migration or a clear refusal with an explanatory error. Unknown optional fields may be preserved or ignored according to a documented policy; unknown required generator types must not be silently replaced with another generator.
+
+Generator IDs and generator configuration versions are distinct from the whole project schema version. Registry entries provide version-aware parameter parsing and migration.
+
+===== Validation on load =====
+
+Before simulation:
+  1. Parse the document and validate schema/version.
+  2. Construct surface/domain objects and validate their capabilities.
+  3. Reconstruct topology and validate all references/invariants.
+  4. Resolve generator IDs and validate parameter schemas.
+  5. Validate boundary-policy compatibility.
+  6. Validate time/events and state-transfer references.
+  7. Report all recoverable diagnostics and refuse unsafe execution when required invariants fail.
+
+Project loading should not execute arbitrary code or expressions from a file. If custom formulas are supported later, define a safe, constrained expression format rather than evaluating untrusted C++ or shell text.
+
+===== Reproducibility =====
+
+Record generator type/version, parameters, random seeds, simulation settings, relevant solver tolerances, and event ordering. Document whether reproducibility is exact or tolerance-based and which software versions affect results. Rendering settings may affect pixel output even when the underlying mathematical state is equivalent.
+
+===== Atomic saves =====
+
+Write to a temporary file and rename into place after successful serialization. Handle disk errors, invalid output paths and incomplete sidecars without corrupting the prior project. Add round-trip tests for all supported model entities.

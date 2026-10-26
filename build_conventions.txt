@@ -1,0 +1,47 @@
+====== Build and coding conventions ======
+
+===== Platform and language =====
+
+Target Linux and C++20. Use CMake and Ninja as the standard build path. GCC and Clang should be supported where dependencies permit. Avoid platform-specific assumptions in the core unless wrapped behind an adapter.
+
+===== Dependency policy =====
+
+Candidate dependencies:
+  * Qt 6 Widgets and OpenGL integration for the desktop editor;
+  * Eigen for linear algebra and sparse numeric operations;
+  * CGAL or another reviewed backend for robust computational geometry;
+  * nlohmann/json for JSON serialization;
+  * Catch2 or GoogleTest for tests;
+  * an optional formatting/linting toolchain such as clang-format and clang-tidy.
+
+Dependency choice is not final until the exact required features, versions, build experience and distribution licenses have been reviewed. Use package managers or documented CMake dependency mechanisms; do not commit copied third-party source without a license review.
+
+===== CMake expectations =====
+
+Provide presets for at least Debug, Release and a sanitizer-enabled build. Expose options to disable Qt/UI and build only the core/CLI/tests. Require explicit C++20. Avoid global include directories and global compiler flags where target-level configuration is possible.
+
+The build instructions must work from a clean checkout. Record exact commands used for configuration, compilation and tests in the developer documentation.
+
+===== Code conventions =====
+
+  - Use descriptive domain-specific names; avoid single-letter names except in short mathematical scopes where u, v, t, E, F, G are conventional.
+  - Keep public interfaces small and documented.
+  - Use RAII and value semantics where practical.
+  - Prefer stable IDs and explicit ownership to long-lived raw pointers.
+  - Avoid global mutable state, especially for random number generators and current simulation state.
+  - Mark immutable access as const and distinguish commands from queries.
+  - Do not swallow exceptions or numerical failure silently.
+  - Give units, coordinate system and tolerance assumptions in comments/docs where ambiguity is possible.
+  - Avoid premature template metaprogramming or generalized frameworks without a concrete use case.
+
+===== Error handling =====
+
+Use structured results for expected user/data/numerical failures. Diagnostics should contain a stable code, severity, human-readable message, and optional entity IDs/context. Reserve exceptions for exceptional control flow or internal programming failures according to the chosen project-wide policy.
+
+===== Threading and state =====
+
+Initially favor single-threaded deterministic simulation. If tasks are parallelized, work from immutable snapshots and publish complete validated results. Topology transactions and event ordering must remain coordinated. The UI thread must not perform long-running simulation steps synchronously; use worker execution when the UI phase is implemented.
+
+===== Documentation updates =====
+
+A change to a public interface, mathematical convention, project schema, generator capability, or accepted boundary policy must update the relevant DokuWiki page and tests in the same phase. Keep examples executable or clearly label them as pseudocode.

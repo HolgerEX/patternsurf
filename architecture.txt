@@ -1,0 +1,73 @@
+====== System architecture ======
+
+===== Architectural rule =====
+
+The core defines mathematical meaning and state transitions. UI and rendering are clients of the core, not owners of domain logic. No UI, rendering or third-party geometry type should leak into core public interfaces.
+
+===== Modules =====
+
+^ Module ^ Responsibilities ^ Must not own ^
+| core | IDs, errors, time conventions, capability descriptors, shared utilities | Qt, OpenGL, backend-specific geometry types |
+| surface | Parameter domains, surface patches, charts, metric evaluation, coordinate maps | Region topology, pattern rendering |
+| geometry | 2D primitives, curves, intersections and geometric predicates behind an adapter | Generator semantics |
+| partition | Faces/regions, shared boundaries, adjacency, validation, topology transactions and lifecycle events | Generator-specific state evolution |
+| fields | Typed continuous/discrete field abstractions, sampling and interpolation contracts | Rendering policy |
+| generators | Pattern algorithms and per-generator state | GUI widgets, project-wide topology mutation |
+| constraints | Boundary policies, capability checks, residuals, priorities and diagnostics | Ad hoc geometry mutation |
+| discretization | Grids, meshes, cell neighborhoods and mappings to regions | Project UI state |
+| numerics | PDE operators, time integrators, linear/nonlinear solvers and convergence diagnostics | Qt and renderer state |
+| simulation | Scheduler, simulation time, event ordering, state snapshots and replay | Drawing code |
+| project | Versioned serialization, migration and validation | GUI widget serialization |
+| render | Field/output conversion, tessellation, 2D/3D drawing and export | Authoritative model state |
+| UI | Editing workflow, inspectors, views, undo/redo commands | Numerical algorithms and topology rules |
+| CLI | Headless validation, simulation and export commands | Duplicate core logic |
+
+===== Dependency direction =====
+
+<code>
+core
+  ^
+surface  geometry  partition  fields
+  ^         ^          ^        ^
+  +---------+----------+--------+
+             generators
+                 ^
+    constraints / discretization
+                 ^
+              numerics
+                 ^
+             simulation
+                 ^
+        project / render / CLI / UI
+</code>
+
+This is a conceptual dependency sketch. Some services may depend on one another through narrow interfaces, but dependency inversion must prevent cycles. The UI and render layers may depend on core-facing abstractions; the core cannot depend on Qt or OpenGL.
+
+===== Repository targets =====
+
+Suggested CMake targets:
+  * `pattern_core`
+  * `pattern_surface`
+  * `pattern_geometry`
+  * `pattern_partition`
+  * `pattern_generators`
+  * `pattern_constraints`
+  * `pattern_numerics`
+  * `pattern_simulation`
+  * `pattern_project`
+  * `pattern_render`
+  * `pattern_cli`
+  * `pattern_ui`
+  * unit and integration test targets
+
+A target may be merged with another during early phases if separation remains clear in directories and public APIs. Do not create empty elaborate frameworks without a phase requirement.
+
+===== Shared contracts =====
+
+Public data exchanged between modules should use stable IDs and value types where possible. Define ownership and mutability explicitly. Avoid exposing raw references to objects whose lifetime may end after a split/merge transaction. Provide immutable snapshots or handles with validation where appropriate.
+
+Use structured error results for expected failures such as invalid geometry, unsupported policy, convergence failure, or incompatible schema. Exceptions may be used internally for unrecoverable programming errors, but must not be the only way normal solver failure is represented.
+
+===== Extension model =====
+
+Initially generators and geometry implementations may be registered in compiled-in registries. The registry stores descriptors, constructors/factories and capabilities. Delay external binary plugins until ABI and lifecycle contracts stabilize. Version serialized generator identifiers independently of C++ class names.

@@ -1,0 +1,51 @@
+====== Simulation and numerical methods ======
+
+===== Simulation scheduler =====
+
+The scheduler owns simulation time, step sequencing, topology event ordering, generator advance requests, boundary preparation, and snapshot publication. It should not hard-code the internal algorithm of a generator.
+
+Distinguish:
+  * geometric time, when region boundaries/topology evolve;
+  * generator time, including adaptive PDE substeps and integer CA generations;
+  * display time, when the renderer refreshes.
+
+Define whether simulation advances synchronously: for coupled generators, the safe baseline is to read a consistent state snapshot, compute requested updates, resolve required coupling, validate the resulting state, then publish the new snapshot. Avoid iteration-order-dependent neighbor updates unless a method explicitly declares asynchronous semantics.
+
+===== Discretization contract =====
+
+A discretization maps a mathematical region/field to numerical degrees of freedom. It provides mesh/site data, mapping between degrees of freedom and (u,v), boundary identification, interpolation/sampling, and validity diagnostics. It must not redefine the exact mathematical domain.
+
+Initial choices:
+  * regular grid for the first cellular automaton;
+  * triangular mesh in parameter space for initial PDE work;
+  * vector-curve integration directly in parameter coordinates.
+
+Do not assume one discretization fits all generators. A region may host several discretizations, and their transfer/interpolation must be explicit.
+
+===== PDE layer =====
+
+Represent fields, differential operators, boundary conditions and time integrators separately enough to test them independently. Start with one two-field reaction-diffusion system. Establish mesh generation, sparse assembly, explicit time-stepping, timestep validation, diagnostics and reproducibility before adding a general solver catalogue.
+
+For surface-aware PDEs, use the induced metric and appropriate surface differential operators. For parameter-space PDEs, use ordinary derivatives in (u,v). The selected mode is part of configuration and must be visible in the project/UI.
+
+An explicit integrator may have stability limits. The solver must expose timestep and numerical failure diagnostics. Add implicit/semi-implicit schemes only after the starter case has known-answer/convergence tests. Do not claim a numerical method supports arbitrary PDEs merely because the interface accepts a function object.
+
+===== Cellular automata =====
+
+A CA specifies site topology, state set, neighborhood, transition rule, and update semantics. Initial implementation: a binary Life-like rule on a regular lattice with synchronous updates. Later add multistate rules, hex/triangular neighborhoods, graph/mesh sites and mapped cross-region neighborhoods.
+
+The boundary model must explain whether the automaton is closed within its region, sees neighbors across region interfaces, wraps periodically, or uses a prescribed external state. Rules at a shared boundary are discrete coupling semantics, not continuous field continuity.
+
+===== Moving geometry and remapping =====
+
+When a region moves, discretized state may need remeshing or resampling. Define transfer operators and measure their errors. For conserved quantities, provide conservative transfer where mathematically appropriate. For nonconserved artistic states, nearest-neighbor/interpolation/reset may be acceptable if configured. Do not label a transfer conservative unless it has been implemented and tested as such.
+
+Topology events can require separate transfer policies for split and merge. Generator-specific hooks should receive the old/new domains and event mapping, not raw half-edge internals.
+
+===== Randomness =====
+
+Every stochastic generator receives an explicit random source. Save seeds and, where required for continuation, RNG state. Define what reproducibility means: usually identical results for the same build, project, parameters and seed within documented floating-point conditions. Do not rely on global random state.
+
+===== Parallelism =====
+
+Initially prioritize correctness and deterministic state transitions over extensive parallelism. Region-local computations may run in parallel when they read an immutable snapshot and have no unsynchronized writes. Coupling and topology commits need a deterministic coordination stage. Profile before adding GPU execution or complex task schedulers.

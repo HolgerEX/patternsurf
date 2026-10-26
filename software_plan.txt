@@ -1,0 +1,529 @@
+====== PatternSurface Engine ======
+
+**Target platform:** Linux · **Language:** C++20 · **Architecture:** extensible mathematical engine with desktop editor and headless renderer
+
+===== 1. Recommended overall design =====
+
+Build the software as a standalone C++ core library, a numerical simulation engine, and a Qt desktop application. Keep rendering and user-interface code outside the mathematical core.
+
+This is the most important architectural decision. The mathematical engine must remain usable without a window, GPU, or GUI event loop. That enables batch rendering, automated testing, later integration into other applications, and independent development of new pattern generators.
+
+The first version should support a single parametrized surface patch, arbitrary supported subdivisions of its parameter domain, evolving region geometry, boundary-aware generators, and both static and time-dependent patterns. The architecture should accommodate multiple surface charts and more advanced numerical methods later.
+
+<code>
+Desktop application
+    Qt editor · parameter-space view · 3D preview · timeline · properties
+
+PatternSurface Core
+    Project model · surface geometry · partition topology · generator API · boundary constraints
+
+Numerical engine
+    PDEs · time integration · cellular automata · stochastic methods
+
+Geometry engine
+    2D regions · shared boundaries · triangulation · topology events
+
+Rendering and export
+    2D rendering · surface tessellation · 3D visualization · SVG · PNG
+</code>
+
+A separate command-line executable should use the same core library. This allows a project to be generated, simulated, and exported on a server without launching the GUI.
+
+===== 2. Technology stack =====
+
+Use established libraries for UI, linear algebra, and geometry, while keeping the mathematical abstractions under the application's control.
+
+^ Area ^ Recommendation ^ Reason ^
+| Language | C++20 | Strong typing, modern standard-library facilities, and broad compiler availability |
+| Build | CMake + Ninja | Reproducible builds, modular targets, IDE integration |
+| Desktop UI | Qt 6 Widgets | Practical desktop editor, docking panels, dialogs, timeline and property editors |
+| Graphics | OpenGL through Qt's ''QOpenGLWidget'' | Hardware-accelerated surface preview and dense graphics rendering |
+| Linear algebra | Eigen | Vectors, matrices, sparse systems, and numerical decompositions |
+| Computational geometry | CGAL behind an adapter, subject to license review | Robust planar arrangements, triangulation, and geometric operations |
+| Project serialization | JSON with ''nlohmann/json'' | Human-readable project files and versioned configuration |
+| Testing | Catch2 or GoogleTest | Unit, integration, and regression tests |
+| Diagnostics | Standard logging interface plus file/console sinks | Reproducible simulation and error reporting |
+
+Relevant documentation: Qt supports Linux desktop development and provides ''QOpenGLWidget'' for integrated OpenGL rendering.
+
+{{https://www.google.com/s2/favicons?domain=https://doc.qt.io&sz=32}}
+
+Qt 6.12
+
+Eigen supplies the necessary linear-algebra building blocks, while CGAL documents arrangement structures that represent subdivisions into vertices, edges, and faces.
+
+{{https://www.google.com/s2/favicons?domain=https://libeigen.gitlab.io&sz=32}}
+
+Eigen
+
+The ''nlohmann/json'' library is a practical option for versioned JSON serialization.
+
+{{https://www.google.com/s2/favicons?domain=https://json.nlohmann.me&sz=32}}
+
+JSON for Modern C++
+
+**Important licensing decision:** review the licenses of the specific Qt modules and CGAL packages before selecting dependencies. Qt has LGPL/GPL and commercial licensing options, and applicable obligations depend on the modules and distribution model.
+
+{{https://www.google.com/s2/favicons?domain=https://doc.qt.io&sz=32}}
+
+Qt 6.11
+
+Keep third-party types out of public core interfaces so geometry libraries can be changed later.
+
+==== Development environment ====
+
+Use GCC or Clang, with CMake presets defining Debug, Release, and sanitizer-enabled builds. Run automated builds and tests on at least one supported Ubuntu or Debian environment. Pin tested dependency versions rather than assuming that every Linux distribution ships identical library versions.
+
+===== 3. Define the core mathematical data model first =====
+
+The data model is more consequential than the GUI. It should be designed before implementing individual pattern algorithms.
+
+==== 3.1 Surface and parameter domain ====
+
+Define a surface patch with a two-dimensional domain and an evaluation interface:
+
+<code cpp>
+struct SurfaceSample {
+    Eigen::Vector3d position;
+    Eigen::Vector3d du;
+    Eigen::Vector3d dv;
+};
+
+class SurfacePatch {
+public:
+    virtual ~SurfacePatch() = default;
+
+    virtual Domain2 parameterDomain() const = 0;
+
+    virtual SurfaceSample evaluate(
+        double u, double v
+    ) const = 0;
+};
+</code>
+
+''Domain2'' represents the supported subset of the parameter plane. The sample includes tangent vectors so the engine can derive the induced metric when needed.
+
+Implement the following built-in surfaces first:
+
+  * Plane: the baseline geometry and regression-test case.
+  * Cylinder patch: a simple nonplanar example with an optional periodic seam.
+  * A general user-defined surface patch through the ''SurfacePatch'' interface.
+
+Design a ''SurfaceAtlas'' container from the start, even if the first release supports only one patch. An atlas will later accommodate multiple charts and transitions needed for surfaces that cannot be described by a single regular parametrization.
+
+The canonical pattern coordinates remain $(u,v)$. The engine must distinguish parameter-space measurements from physical distances computed from the surface metric.
+
+==== 3.2 The subdivision model ====
+
+Use a planar cell complex as the authoritative representation of the partition.
+
+Each region is a face in a topological structure. Boundaries are shared geometric entities, not independently duplicated curves belonging to each neighboring region.
+
+The conceptual structure is a doubly connected edge list (DCEL), or an equivalent half-edge representation:
+
+  * Vertices store parameter-space positions.
+  * Half-edges store directed boundary segments and adjacency information.
+  * Faces represent regions.
+  * Shared edges identify the common boundary of neighboring regions.
+  * Adjacency records connect regions and their boundary conditions.
+
+A shared edge must have a consistent identity, even though its orientation is reversed when traversed from the other region.
+
+This makes it possible to change a boundary once and have both neighboring regions observe the same geometric change.
+
+Each region also has a stable identifier, lifecycle state, generator configuration, internal simulation state, and optional metadata.
+
+==== 3.3 How to represent evolving regions ====
+
+Use two mechanisms with separate responsibilities.
+
+**Continuous geometry evolution:** boundary curves and their control points move over time. Each boundary has a trajectory or time-dependent state.
+
+**Discrete topology evolution:** an explicit event creates, deletes, splits, or merges regions. Execute each topology change as a validated transaction.
+
+For example:
+
+<code>
+Region 17
+    |
+    | SplitEvent at t = 4.5
+    v
+Region 31 + Region 32
+</code>
+
+A transaction should either produce a valid new partition or fail without corrupting the previous state. This avoids intermediate states with accidental gaps, duplicate edges, or overlapping faces.
+
+Store the event history separately from the current geometry. It will support timeline editing, deterministic replay, debugging, and undo/redo.
+
+Level-set methods can be added later as an alternative evolution method. When their output changes topology, the extracted contours must be converted into a valid partition structure before becoming authoritative.
+
+==== 3.4 Support multiple region geometry representations ====
+
+Do not require every region to use polygons internally. Introduce a region-geometry interface that can later support polygonal chains, spline boundaries, implicit level sets, or mesh-based regions.
+
+For the first implementation, use polygonal boundaries with shared edges. Add curved boundaries through spline or parametric-edge implementations, using controlled geometric approximation where the geometry backend requires it.
+
+A robust geometry backend is preferable to ad hoc intersection code. CGAL's arrangement facilities are one candidate for maintaining planar subdivisions, although package selection must account for the required curve types and licensing constraints.
+
+{{https://www.google.com/s2/favicons?domain=https://cgal.github.io&sz=32}}
+
+2D Arrangements: User Manual
+
+===== 4. Pattern generator architecture =====
+
+Generators should be interchangeable implementations of a common lifecycle, but they must not be forced into a common mathematical representation.
+
+A differential equation, a cellular automaton, and a tiling algorithm have fundamentally different state and update semantics. The shared interface should cover domain ownership, initialization, evolution, boundary interaction, serialization, and output—not prescribe how the internal algorithm works.
+
+A conceptual C++ interface is:
+
+<code cpp>
+class PatternGenerator {
+public:
+    virtual ~PatternGenerator() = default;
+
+    virtual GeneratorDescriptor descriptor() const = 0;
+
+    virtual void initialize(
+        const GeneratorContext& context
+    ) = 0;
+
+    virtual void advance(
+        const StepContext& context
+    ) = 0;
+
+    virtual PatternOutput evaluate(
+        const EvaluationContext& context
+    ) const = 0;
+
+    virtual void onRegionEvent(
+        const RegionEvent& event
+    ) = 0;
+
+    virtual void serialize(
+        ProjectWriter& writer
+    ) const = 0;
+};
+</code>
+
+These are design-level signatures, not a final API. The contexts should provide read-only geometry and boundary information, relevant time-step data, and explicitly controlled access to the generator's state.
+
+The interface should also declare generator capabilities: continuous or discrete time, supported boundary conditions, required discretization, whether topology changes are supported, and whether the method is deterministic.
+
+==== Initial generator implementations ====
+
+Implement four generator families to exercise distinct mathematical requirements.
+
+{{https://images.openai.com/static-rsc-4/loZiYuQyddOmosKgnNs5tkYwP0cCdy6o-34kubcS7NhyeLTNXuHkyW1ePylYHXkuuDxc5P59k-cgAZe3nSR9MY8r7a3LfJS26GHbhKlYM6EiZxlvzJi44yqPFTfTRfb7jbx8so3r_mBc_JLJqRf5t05ei62D6YdFGs6DVHVaLdU?purpose=inline|Monochrome Contour Line Abstract Art}}
+
+**1. Vector-field patterns**
+
+Integrate curves through a direction field. This provides immediate visual output and tests coordinate transforms, clipping to arbitrary regions, line termination, and tangent compatibility across shared boundaries.
+
+{{https://images.openai.com/static-rsc-4/O8efRFVii3yWGJN-FReCO9xWbvG2pst2d4fl_WJ62uRK-i9jS3-WSQGz7xbxR2ocmDr2kHtEnZZTdhT8FM25o7POs85TMDu5vRoMRa8RrugGHhmjYkJRk5vcSGd7xObAgIW0d5Nc_oLFpz_nX7LCrIlJ2ZBN3p5h7Lx8ZQai8IE?purpose=inline|Reaction Diffusion: The Gray-Scott Algorithm}}
+
+**2. PDE patterns**
+
+Begin with a two-field reaction–diffusion system, such as Gray–Scott. It tests continuous field state, spatial discretization, numerical time integration, boundary conditions, and deterministic simulation.
+
+{{https://images.openai.com/static-rsc-4/Hp07VZvhBzM8to2bMqqEaxgWWMmYk5v5kFXVKleSipu2Qffc7xP2SI4SbhKitreNOOtVAKIajBKQ627a3xZjfMMuMW0ppKYmM8vqSdM8Tg5vOv71_ShpeVR--kgzYzA1AFo_ap9GR-PfLfH45mIM-peJPrzSzSjjUNmQpCmyPzw?purpose=inline|Cellular Automata and an Implementation of Conway's Game of Life}}
+
+**3. Cellular automata**
+
+Implement a Life-like binary automaton first, then a multistate automaton. Use a separate neighborhood abstraction so grid, triangular, hexagonal, and mesh-based implementations are possible.
+
+{{https://images.openai.com/static-rsc-4/vGGwaPF4oSZROH2YoJYMr0lynPRRMpkELwDLNVCqVCFT84EDDMBEhrti2xJxxL6J6Ryh9qCTUTskjtt6Xz4E9cHq9UtVYkEeEm0R3juQqX3JhfbLPEfK5DaDZrtNaCOsPbA0B1vtGw4uY4KZcGxpzKiRCBxmfG6AuIUTY3rCJvDf2KuEyBRMAjd-JPVROAEl?purpose=inline|Abstract background with wave of scattered dots}}
+
+**4. Stochastic spatial patterns**
+
+Implement minimum-distance point sampling with density and optional spatially varying parameters. It tests random-state management, exclusion zones across boundaries, and parameter control.
+
+These four methods are enough to reveal whether the architecture is genuinely general. Adding more algorithms before they work through the same domain and boundary abstractions would be premature.
+
+==== Pattern output must be heterogeneous ====
+
+Not every pattern should be forced into a raster image or scalar field. Define a typed output model that can contain:
+
+  * Scalar, vector, or multichannel fields.
+  * Curves and polylines.
+  * Point sets and repeated motifs.
+  * Meshes or height fields.
+  * Discrete cell states.
+  * Surface texture data.
+
+The renderer consumes this output independently of the generator. A vector-field generator can emit curves; a PDE generator can emit scalar fields; a cellular automaton can emit discrete states that are converted into geometry or color.
+
+This design also prevents the engine from confusing the internal simulation state with the visible pattern.
+
+===== 5. Boundary-constraint system =====
+
+Build boundary coupling as a separate subsystem rather than embedding neighbor-specific logic in every pattern generator.
+
+Each shared boundary has a policy object, along with a reference to the two adjacent regions. Policies can include exact continuity, directional or phase alignment, PDE boundary conditions, cellular-automaton neighbor exchange, minimum-clearance conditions, and soft visual compatibility.
+
+Conceptually:
+
+<code cpp>
+class BoundaryPolicy {
+public:
+    virtual ~BoundaryPolicy() = default;
+
+    virtual ConstraintDescriptor descriptor() const = 0;
+
+    virtual void prepare(
+        const BoundaryContext& context
+    ) = 0;
+
+    virtual ConstraintResult evaluate(
+        const BoundaryState& left,
+        const BoundaryState& right
+    ) const = 0;
+};
+</code>
+
+Different policy implementations may require completely different data. A flux constraint needs numerical field traces and fluxes; a curve-matching policy needs endpoint positions and tangents; a cellular automaton may need access to neighboring cell states.
+
+==== Exact versus approximate satisfaction ====
+
+The engine must distinguish three outcomes:
+
+  - Satisfied: all required exact constraints pass their stated tolerances.
+  - Approximately satisfied: a soft objective has been optimized to an accepted error level.
+  - Infeasible or unresolved: constraints conflict, a method does not support the requested condition, or numerical convergence fails.
+
+For PDEs on neighboring regions, use a shared mesh interface or compatible interface discretization so both sides agree on boundary degrees of freedom. For curves, coordinate shared endpoints and tangent conditions. For cellular automata, define explicit cross-boundary neighbor and update semantics instead of pretending that continuous-field matching applies.
+
+A crucial implementation rule is to make boundary conditions typed and capability-checked. Do not let a user assign an arbitrary boundary policy to an incompatible generator without warning.
+
+===== 6. Numerical engine design =====
+
+Use a dedicated numerical layer with an explicit discretization interface. The same mathematical method should eventually be able to operate with different computational meshes, although the first release should use a limited set of well-tested discretizations.
+
+==== PDEs ====
+
+For continuous fields on arbitrary supported region shapes, use a triangular mesh in parameter space and begin with a basic finite-element implementation.
+
+Use Eigen for the sparse matrix assembly and linear algebra. Eigen provides sparse-matrix and numerical-solver facilities suitable for this role.
+
+{{https://www.google.com/s2/favicons?domain=https://libeigen.gitlab.io&sz=32}}
+
+Eigen
+
+Start with a reaction–diffusion example and a simple explicit time integrator, with stability checks and configurable time-step limits. Add implicit or semi-implicit methods after the initial system is validated. The numerical solver must report instability, invalid values, failed convergence, and other errors rather than silently returning corrupted output.
+
+The PDE layer should distinguish:
+
+$\nabla_{u,v} \quad\text{from}\quad \nabla_S.$
+
+The first uses derivatives in parameter coordinates; the second uses the surface's induced metric. Parameter-space behavior should be the default, as specified, while surface-aware operators are selected explicitly.
+
+==== Cellular automata ====
+
+Cellular automata need a discrete site and neighborhood representation. Start with a regular grid for the simplest implementation, but introduce an interface for alternate topologies.
+
+For irregular regions, the chosen discretization determines how sites are assigned to regions and how boundary sites communicate. Region changes require a state-transfer policy—such as nearest-neighbor mapping, conservative transfer when meaningful, reset, or a generator-defined rule.
+
+==== Coordinate transformations ====
+
+Implement a reusable ''CoordinateMap2D'' abstraction for transformations
+
+$(u,v)\mapsto(h(u,v),k(u,v)).$
+
+It should provide evaluation and, when required, derivatives and inverse mapping. The map may be time-dependent. Invertibility should be a declared capability, not an unconditional requirement; some pattern methods can use singular or many-to-one maps, while others cannot.
+
+===== 7. Desktop application design =====
+
+The GUI should expose the mathematical model through direct visual editing, rather than making users construct everything through parameter dialogs.
+
+^ Workspace layout ^^
+| **Parameter-space editor** | Draw, split, merge, and select regions. Edit shared boundaries and view region IDs. |
+| **3D surface preview** | Display the pattern on the physical surface with camera controls and surface inspection. |
+| **Property inspector** | Edit the selected generator, seed, parameters, coordinate map, and boundary policies. |
+| **Timeline and diagnostics** | Scrub simulation time, inspect topology events, play or pause evolution, and review constraint failures. |
+
+Use Qt Widgets for dockable panels, menus, property forms, and the project tree. Render dense geometry using an OpenGL viewport; Qt's ''QOpenGLWidget'' integrates a hardware-accelerated rendering context into a widget-based application.
+
+{{https://www.google.com/s2/favicons?domain=https://doc.qt.io&sz=32}}
+
+Qt OpenGL
+
+==== Minimum editing capabilities ====
+
+The first usable editor should allow a user to create a surface, draw and edit a partition, assign different generators to regions, change shared-boundary behavior, run and stop a simulation, inspect time steps, and export the result.
+
+Provide a 2D view of $(u,v)$ in addition to the 3D view. The parameter-space view is not merely an editing convenience: it is the canonical representation used by the mathematical engine.
+
+==== Project files and reproducibility ====
+
+Store projects as versioned JSON documents, with large simulation caches and other assets stored separately as needed. Save:
+
+  * Surface definition and domain.
+  * Regions, shared boundaries, and stable identifiers.
+  * Generator types and parameters.
+  * Random seeds and state-transfer policies.
+  * Boundary constraints.
+  * Timeline and topology events.
+  * Rendering and export settings.
+
+Project loading should validate references, schema versions, generator availability, and geometry consistency before starting a simulation.
+
+===== 8. Repository and module structure =====
+
+Keep dependencies flowing in one direction: UI and rendering may use the core, but the core must not depend on Qt widgets or graphics classes.
+
+<code>
+pattern-surface/
+├── CMakeLists.txt
+├── CMakePresets.json
+├── apps/
+│   ├── desktop/
+│   └── cli/
+├── include/pattern/
+│   ├── math/
+│   ├── surface/
+│   ├── domain/
+│   ├── partition/
+│   ├── fields/
+│   ├── generators/
+│   ├── constraints/
+│   ├── simulation/
+│   ├── discretization/
+│   ├── events/
+│   ├── render/
+│   └── project/
+├── src/
+│   ├── core/
+│   ├── geometry/
+│   ├── numerical/
+│   ├── generators/
+│   ├── rendering/
+│   └── project/
+├── plugins/
+│   └── examples/
+├── tests/
+│   ├── unit/
+│   ├── geometry/
+│   ├── simulation/
+│   └── integration/
+├── examples/
+└── docs/
+    ├── architecture.md
+    ├── mathematical-model.md
+    └── generator-api.md
+</code>
+
+Use distinct CMake targets such as ''pattern_core'', ''pattern_geometry'', ''pattern_numerics'', ''pattern_render'', ''pattern_ui'', ''pattern_cli'', and the test targets. This limits recompilation and makes dependencies visible.
+
+Don't expose CGAL types or Qt types in ''pattern_core'' public interfaces. Provide adapters so the mathematical model does not become inseparable from a specific geometry or UI library.
+
+===== 9. Implementation roadmap =====
+
+Build in vertical slices: each milestone should leave the application in a runnable, testable state. Avoid spending months building a generic framework before producing the first visible pattern.
+
+**Milestone 0 — Foundation and mathematical contracts**
+
+Define coordinate conventions, surface interfaces, region identifiers, generator capabilities, boundary-policy contracts, error handling, and project-file schema. Create the CMake targets and automated test runner.
+
+**Deliverable:** a compilable core with documented interfaces and tests.
+
+**Milestone 1 — Surface geometry and partition editor**
+
+Implement the plane and cylinder, the parameter-domain model, a shared-edge partition structure, region selection and editing, topology validation, and a basic 2D editor. Establish a 3D surface preview.
+
+**Deliverable:** a rectangular parameter domain partitioned into valid regions and displayed on a surface.
+
+**Milestone 2 — Generator API and first working patterns**
+
+Implement the generator lifecycle, typed outputs, deterministic random seeds, coordinate maps, vector-field patterns, and clipping to region geometry.
+
+Add project save/load and an initial export path.
+
+**Deliverable:** different regions produce distinct patterns on the same surface.
+
+**Milestone 3 — Boundary constraints**
+
+Implement the adjacency graph, boundary-policy registry, exact versus soft constraints, endpoint and tangent matching, conflict detection, and diagnostics.
+
+**Deliverable:** adjacent regions coordinate their patterns through explicit boundary conditions.
+
+**Milestone 4 — Numerical generation**
+
+Add triangular-mesh discretization, a PDE solver, reaction–diffusion patterns, and cellular automata. Define state transfer during remeshing and document numerical stability limits.
+
+**Deliverable:** continuous and discrete dynamical patterns coexist in the same project.
+
+**Milestone 5 — Time-dependent partitions**
+
+Add a simulation timeline, moving boundaries, creation and deletion events, splitting and merging, transactional topology updates, and configurable pattern-state transfer.
+
+**Deliverable:** subdivisions and their patterns evolve together over time without corrupting the partition.
+
+**Milestone 6 — Production workflow**
+
+Complete undo/redo, simulation playback, diagnostics, PNG and SVG export where applicable, a headless rendering CLI, and a documented project format.
+
+Add mesh or 3D scene export if required by the target use cases.
+
+**Deliverable:** a usable desktop tool and reproducible batch-rendering workflow.
+
+**Milestone 7 — Advanced extensibility**
+
+Add multi-chart surfaces, periodic seam handling, level-set evolution, more geometry backends, additional time integrators, and a versioned external plugin interface.
+
+**Deliverable:** a platform that can accept new mathematical methods without rewriting the core.
+
+===== 10. Testing and acceptance criteria =====
+
+The mathematical correctness of the engine must be tested independently of its visual appearance. Attractive output alone is not evidence that topology, boundary conditions, or simulations are correct.
+
+^ Test category ^ Essential acceptance criteria ^
+| Surface geometry | The plane map recovers expected coordinates; tangent vectors and metrics match analytical results |
+| Partition topology | Regions cover the domain under the configured policy; shared boundaries are consistent; invalid transactions are rejected |
+| Coordinate maps | Identity and known transformations produce correct results; singular and non-invertible maps are handled according to declared capabilities |
+| Boundary constraints | Test exact matches, soft mismatches, unsupported conditions, and contradictory constraints |
+| PDE solver | Compare with analytical or manufactured solutions where available; test stability and convergence as resolution changes |
+| Cellular automata | Known rules produce expected generations, including neighborhoods crossing region boundaries |
+| Dynamics | Creation, deletion, splitting, and merging preserve invariants and have deterministic event semantics |
+| Reproducibility | Identical project, seed, and solver settings reproduce equivalent results within stated numerical tolerances |
+| Serialization | Saving and reopening a project preserves geometry, generator settings, timeline, and constraints |
+| Integration | A project can be loaded and rendered in the GUI and the headless executable with consistent results |
+
+Use property-based or randomized tests for partition operations in addition to hand-authored examples. Add regression tests for every topology bug and every numerical failure discovered during development.
+
+Performance tests should measure geometry updates, PDE steps, rendering, and exports separately. Optimize after establishing representative workloads rather than prematurely introducing GPU compute or sophisticated parallel execution.
+
+===== 11. Main technical risks and how to control them =====
+
+**Arbitrary geometry.** There is no single finite representation that exactly captures every conceivable region shape. The initial implementation should define supported curve classes and approximation tolerances. The public abstraction can support additional representations later.
+
+**Partition validity during evolution.** Independent boundary motion can cause gaps and overlaps. Shared edges, centralized topology management, and transactional events should enforce the chosen partition invariants.
+
+**Incompatible boundary conditions.** Two generators may demand mutually exclusive interface behavior. The system must detect this and report infeasibility rather than silently relaxing a hard constraint.
+
+**Numerical reliability.** Arbitrary PDEs cannot all use the same stable time integrator or discretization. Each solver must declare supported equations, assumptions, stability limitations, and failure modes.
+
+**Topology changes and simulation state.** A geometry split does not determine how fields, automaton cells, or random states should be inherited. Use generator-specific state-transfer rules, with explicit defaults.
+
+**Surface seams and singularities.** A single chart cannot represent every surface globally without singularities or identifications. Design the atlas abstraction early, but defer full multi-chart simulation until the single-chart system is reliable.
+
+**External plugins.** A public C++ binary interface is vulnerable to compiler and ABI incompatibilities. Initially register generators as compiled-in modules. When external binary plugins are introduced, define a versioned interface with carefully controlled ABI boundaries.
+
+===== 12. Scope of the first usable release =====
+
+The initial release should be considered complete when it can:
+
+  * Define a plane or cylinder using a parametrization $\mathbf{r}(u,v)$.
+  * Partition its parameter domain into multiple valid regions.
+  * Assign a different pattern generator to each region.
+  * Generate vector-field curves, a reaction–diffusion field, and a cellular automaton.
+  * Enforce at least one exact and one soft boundary-compatibility rule.
+  * Move boundaries and apply validated split and merge events.
+  * Display the composition in parameter space and on the 3D surface.
+  * Save and reopen projects reproducibly.
+  * Export static results and render projects through a command-line tool.
+
+Do not include a full general-purpose PDE language, arbitrary user-written scripting, adaptive multi-chart remeshing, or unrestricted binary plugins in this first release. Provide extension points for them, but implement them only when the underlying contracts have been validated.
+
+----
+
+**My primary recommendation:** build the geometry and boundary model first, then demonstrate it with a simple vector-field generator before implementing sophisticated differential-equation solvers. That sequence validates the hardest architectural premise early: independently generated patterns can coexist on dynamically changing regions while preserving mathematically defined relationships at their shared boundaries.

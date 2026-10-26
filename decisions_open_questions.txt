@@ -1,0 +1,39 @@
+====== Decisions and deferred questions ======
+
+===== Decisions already made =====
+
+  * Language/platform: C++20 on Linux.
+  * Application shape: independent core library, Qt desktop editor, headless CLI.
+  * Ambient geometry: R^3.
+  * Main object: a parametrized surface patch r(u,v) into R^3; a plane is a special case.
+  * Canonical computation coordinates: original parameter coordinates (u,v).
+  * Derived parameter maps (h,k)=psi(u,v,t) are allowed and generator-dependent.
+  * Regions and patterns may evolve in time; regions may appear, disappear, split and merge.
+  * First-release authoritative partition: shared-boundary planar cell complex in parameter space.
+  * Shared edges have a single identity, and topology edits are transactional.
+  * Generators are heterogeneous; continuous PDEs and discrete cellular automata are both first-class.
+  * Boundary policies are explicit, typed, capability-checked, and can be hard or soft.
+  * Rendering is not the source of truth for geometry or pattern state.
+  * External binary plugins, unrestricted scripting, full multi-chart simulation and GPU compute are deferred.
+
+===== Questions to resolve during implementation =====
+
+**Geometry backend:** select a library only after checking the needed curve/arrangement operations, numerical assumptions, build complexity, and license implications. Keep an adapter so it can be replaced.
+
+**Coverage policy:** default to full coverage of a rectangular domain. Decide whether an explicit background region is required for deletions, or whether deletions must be paired with another operation that preserves coverage.
+
+**Boundary orientation:** define one convention for interface parameterization, outward normals and correspondence between traces. Write the convention down before implementing flux or tangent conditions.
+
+**Curve geometry:** first release may use polygonal boundaries. Determine when spline or implicit boundaries are worth promoting beyond an adapter-level extension.
+
+**Time/event semantics:** define event ordering for equal timestamps and whether geometry updates happen before generator updates at a given simulation time. The choice must be explicit and tested.
+
+**Numerical defaults:** select a starter mesh resolution and integrator based on test cases, not aesthetics alone. Document limits and avoid one default for all PDEs.
+
+**Reproducibility:** specify the guarantee level (same build/platform versus cross-platform). Save seeds and solver settings; test what is promised.
+
+**External extensions:** decide on a plugin or scripting mechanism only after built-in generators demonstrate stable interfaces.
+
+===== Change control =====
+
+When an open question is resolved, update this page with the decision, its rationale, alternatives rejected, migration impact, and affected tests. Do not allow contradictory assumptions to persist in code and documentation.
