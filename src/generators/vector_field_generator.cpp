@@ -153,40 +153,109 @@ std::optional<ParameterPoint> first_boundary_intersection(
     };
 }
 
-ParameterPoint direction(
+Result<Vector2> direction(
     ParameterPoint point,
     const VectorFieldConfig& config,
+    const CoordinateMap2D& coordinate_map,
     double sign)
 {
+    const auto mapped = coordinate_map.evaluate(point);
+    if (!mapped) {
+        return Result<Vector2>::failure(mapped.error());
+    }
+    const auto jacobian = coordinate_map.jacobian(point);
+    if (!jacobian) {
+        return Result<Vector2>::failure(jacobian.error());
+    }
+
+    const double phase_h = config.warp_frequency * mapped.value().h;
+    const double phase_k = config.warp_frequency * mapped.value().k;
+    if (!std::isfinite(phase_h) || !std::isfinite(phase_k)) {
+        return Result<Vector2>::failure(diagnostic(
+            ErrorCode::invalid_argument,
+            "Warp frequency overflows in derived coordinates."));
+    }
     const double angle = config.base_angle
         + config.warp_amplitude
-            * std::sin(config.warp_frequency * point.u)
-            * std::sin(config.warp_frequency * point.v);
-    return {sign * std::cos(angle), sign * std::sin(angle)};
+            * std::sin(phase_h)
+            * std::sin(phase_k);
+    if (!std::isfinite(angle)) {
+        return Result<Vector2>::failure(diagnostic(
+            ErrorCode::invalid_argument,
+            "Vector-field angle is non-finite."));
+    }
+
+    const Jacobian2& matrix = jacobian.value();
+    const double scale = std::max({
+        std::abs(matrix.dh_du),
+        std::abs(matrix.dh_dv),
+        std::abs(matrix.dk_du),
+        std::abs(matrix.dk_dv)
+    });
+    if (!std::isfinite(scale) || scale == 0.0) {
+        return Result<Vector2>::failure(diagnostic(
+            ErrorCode::unsupported_operation,
+            "Vector field requires a locally invertible coordinate map."));
+    }
+
+    const double a = matrix.dh_du / scale;
+    const double b = matrix.dh_dv / scale;
+    const double c = matrix.dk_du / scale;
+    const double d = matrix.dk_dv / scale;
+    const double determinant = a * d - b * c;
+    if (!std::isfinite(determinant)
+        || std::abs(determinant) <= std::numeric_limits<double>::epsilon() * 32.0) {
+        return Result<Vector2>::failure(diagnostic(
+            ErrorCode::unsupported_operation,
+            "Vector field requires a locally invertible coordinate map."));
+    }
+
+    const double field_h = std::cos(angle) * sign;
+    const double field_k = std::sin(angle) * sign;
+    const double vector_u = ((d * field_h - b * field_k) / determinant) / scale;
+    const double vector_v = ((a * field_k - c * field_h) / determinant) / scale;
+    const double magnitude = std::hypot(vector_u, vector_v);
+    if (!std::isfinite(magnitude) || magnitude == 0.0) {
+        return Result<Vector2>::failure(diagnostic(
+            ErrorCode::invalid_argument,
+            "Coordinate-map pullback produced an invalid direction."));
+    }
+    return Result<Vector2>::success({
+        vector_u / magnitude,
+        vector_v / magnitude
+    });
 }
 
-ParameterPoint advance(
+Result<ParameterPoint> advance(
     ParameterPoint point,
     double step,
     const VectorFieldConfig& config,
+    const CoordinateMap2D& coordinate_map,
     double sign)
 {
-    const ParameterPoint initial = direction(point, config, sign);
+    const auto initial = direction(point, config, coordinate_map, sign);
+    if (!initial) {
+        return Result<ParameterPoint>::failure(initial.error());
+    }
     const ParameterPoint midpoint{
-        point.u + 0.5 * step * initial.u,
-        point.v + 0.5 * step * initial.v
+        point.u + 0.5 * step * initial.value().x,
+        point.v + 0.5 * step * initial.value().y
     };
-    const ParameterPoint middle = direction(midpoint, config, sign);
-    return {
-        point.u + step * middle.u,
-        point.v + step * middle.v
-    };
+    const auto middle = direction(midpoint, config, coordinate_map, sign);
+    if (!middle) {
+        return Result<ParameterPoint>::failure(middle.error());
+    }
+    return Result<ParameterPoint>::success({
+        point.u + step * middle.value().x,
+        point.v + step * middle.value().y
+    });
 }
 
 Result<std::vector<ParameterPoint>> trace(
     ParameterPoint seed,
     double sign,
     const VectorFieldConfig& config,
+    const CoordinateMap2D& coordinate_map,
     const std::vector<ParameterPoint>& polygon,
     double linear_tolerance,
     double cross_tolerance,
@@ -202,7 +271,12 @@ Result<std::vector<ParameterPoint>> trace(
         const double step = std::min(
             config.step_size,
             branch_length - travelled);
-        const ParameterPoint next = advance(current, step, config, sign);
+        const auto advanced = advance(
+            current, step, config, coordinate_map, sign);
+        if (!advanced) {
+            return Result<std::vector<ParameterPoint>>::failure(advanced.error());
+        }
+        const ParameterPoint next = advanced.value();
         if (!std::isfinite(next.u) || !std::isfinite(next.v)) {
             return Result<std::vector<ParameterPoint>>::failure(diagnostic(
                 ErrorCode::invalid_argument,
@@ -232,13 +306,17 @@ Result<std::vector<ParameterPoint>> trace(
 
 }  // namespace
 
-VectorFieldCurveGenerator::VectorFieldCurveGenerator(VectorFieldConfig config)
-    : config_(config)
+VectorFieldCurveGenerator::VectorFieldCurveGenerator(
+    VectorFieldConfig config,
+    std::shared_ptr<const CoordinateMap2D> coordinate_map)
+    : config_(config),
+      coordinate_map_(std::move(coordinate_map))
 {
 }
 
 Result<VectorFieldCurveGenerator> VectorFieldCurveGenerator::create(
-    VectorFieldConfig config)
+    VectorFieldConfig config,
+    std::shared_ptr<const CoordinateMap2D> coordinate_map)
 {
     if (!std::isfinite(config.seed_spacing) || config.seed_spacing <= 0.0
         || !std::isfinite(config.step_size) || config.step_size <= 0.0
@@ -259,8 +337,18 @@ Result<VectorFieldCurveGenerator> VectorFieldCurveGenerator::create(
             "Requested curve length and step size exceed the supported step limit."));
     }
 
+    if (!coordinate_map) {
+        coordinate_map = std::make_shared<IdentityCoordinateMap>();
+    }
+    const CoordinateMapCapabilities capabilities = coordinate_map->capabilities();
+    if (!capabilities.has_jacobian || !capabilities.has_inverse) {
+        return Result<VectorFieldCurveGenerator>::failure(diagnostic(
+            ErrorCode::unsupported_operation,
+            "Vector-field curves require a coordinate map with a Jacobian and inverse."));
+    }
+
     return Result<VectorFieldCurveGenerator>::success(
-        VectorFieldCurveGenerator(config));
+        VectorFieldCurveGenerator(config, std::move(coordinate_map)));
 }
 
 Result<CurveSet> VectorFieldCurveGenerator::generate(
@@ -282,18 +370,6 @@ Result<CurveSet> VectorFieldCurveGenerator::generate(
     const std::vector<ParameterPoint> polygon =
         polygon_for_region(partition, *region);
     const Domain2& domain = partition.domain();
-    const double parameter_scale = std::max(
-        std::abs(domain.min_u()),
-        std::max({
-            std::abs(domain.min_v()),
-            std::abs(domain.max_u()),
-            std::abs(domain.max_v())
-        }));
-    if (!std::isfinite(config_.warp_frequency * parameter_scale)) {
-        return Result<CurveSet>::failure(diagnostic(
-            ErrorCode::invalid_argument,
-            "Warp frequency overflows on this parameter domain."));
-    }
     double min_u = domain.max_u();
     double min_v = domain.max_v();
     double max_u = domain.min_u();
@@ -355,6 +431,7 @@ Result<CurveSet> VectorFieldCurveGenerator::generate(
                 seed,
                 -1.0,
                 config_,
+                *coordinate_map_,
                 polygon,
                 linear_tolerance,
                 cross_tolerance,
@@ -367,6 +444,7 @@ Result<CurveSet> VectorFieldCurveGenerator::generate(
                 seed,
                 1.0,
                 config_,
+                *coordinate_map_,
                 polygon,
                 linear_tolerance,
                 cross_tolerance,

@@ -30,6 +30,7 @@ if(PATTERNSURF_ENABLE_SANITIZERS)
 endif()
 
 add_library(pattern_core
+    src/surface/coordinate_map.cpp
     src/core/domain2.cpp
     src/surface/plane_patch.cpp
     src/surface/cylinder_patch.cpp

@@ -5,7 +5,9 @@
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <string_view>
+#include <utility>
 
 namespace {
 
@@ -187,6 +189,54 @@ void test_curves_clip_to_polygonal_region()
     }
 }
 
+void test_affine_map_pulls_back_field_direction()
+{
+    pattern::VectorFieldConfig config;
+    config.seed_spacing = 0.3;
+    config.step_size = 0.05;
+    config.maximum_length = 2.0;
+
+    const auto rotation = pattern::AffineCoordinateMap::create(
+        0.0, -1.0, 1.0, 0.0, 0.0, 0.0);
+    expect(rotation.has_value(), "coordinate rotation is created");
+    if (!rotation) {
+        return;
+    }
+    std::shared_ptr<const pattern::CoordinateMap2D> map =
+        std::make_shared<pattern::AffineCoordinateMap>(rotation.value());
+    const auto generator = pattern::VectorFieldCurveGenerator::create(
+        config, std::move(map));
+    expect(generator.has_value(), "generator accepts an invertible affine map");
+    if (!generator) {
+        return;
+    }
+
+    const pattern::Partition partition = make_partition();
+    const auto curves = generator.value().generate(
+        partition, pattern::RegionId{1});
+    expect(curves.has_value(), "mapped vector field generates curves");
+    if (!curves) {
+        return;
+    }
+    expect(!curves.value().curves.empty(), "mapped field emits curves");
+    for (const auto& curve : curves.value().curves) {
+        expect(curve.points.front().v >= 1.0 - 1e-10
+                && curve.points.back().v <= 1e-10,
+            "derived-coordinate horizontal field pulls back to vertical flow");
+    }
+
+    const auto singular = pattern::AffineCoordinateMap::create(
+        1.0, 2.0, 2.0, 4.0, 0.0, 0.0);
+    expect(singular.has_value(), "singular affine map is constructible");
+    if (singular) {
+        std::shared_ptr<const pattern::CoordinateMap2D> singular_map =
+            std::make_shared<pattern::AffineCoordinateMap>(singular.value());
+        expect(!pattern::VectorFieldCurveGenerator::create(
+                config, std::move(singular_map)),
+            "vector-field generator rejects maps without an inverse");
+    }
+}
+
 }  // namespace
 
 int main()
@@ -195,6 +245,7 @@ int main()
     test_curves_are_deterministic_and_clipped();
     test_missing_region_and_seed_limit();
     test_curves_clip_to_polygonal_region();
+    test_affine_map_pulls_back_field_direction();
 
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";

@@ -2,8 +2,10 @@
 
 #include "pattern/core/result.hpp"
 #include "pattern/partition/partition.hpp"
+#include "pattern/surface/coordinate_map.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <string_view>
 #include <vector>
 
@@ -36,7 +38,8 @@ struct GeneratorDescriptor {
 class VectorFieldCurveGenerator {
 public:
     [[nodiscard]] static Result<VectorFieldCurveGenerator> create(
-        VectorFieldConfig config);
+        VectorFieldConfig config,
+        std::shared_ptr<const CoordinateMap2D> coordinate_map = {});
 
     [[nodiscard]] static constexpr GeneratorDescriptor descriptor() noexcept
     {
@@ -53,9 +56,12 @@ public:
         RegionId region) const;
 
 private:
-    explicit VectorFieldCurveGenerator(VectorFieldConfig config);
+    VectorFieldCurveGenerator(
+        VectorFieldConfig config,
+        std::shared_ptr<const CoordinateMap2D> coordinate_map);
 
     VectorFieldConfig config_;
+    std::shared_ptr<const CoordinateMap2D> coordinate_map_;
 };
 
 }  // namespace pattern

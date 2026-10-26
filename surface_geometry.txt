@@ -41,6 +41,8 @@ A CoordinateMap2D evaluates psi_t(u,v)=(h,k). Its declared capabilities may incl
 
 At minimum implement identity mapping and a configurable affine map. A nonlinear custom map can follow. Do not require inversion unless the consuming algorithm needs it. When estimating transformed feature sizes or derivatives, use the Jacobian and document singularity behavior.
 
+The initial C++ implementation provides identity and affine maps. Affine maps validate finite coefficients and declare invertibility; singular maps remain evaluable but report inverse requests as unsupported. Vector-field generation requires an invertible map and pulls derived-coordinate directions back through its Jacobian to the canonical parameter domain.
+
 ===== Coordinate conventions =====
 
 Choose one consistent convention for:

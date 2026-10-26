@@ -60,7 +60,7 @@ theta(u,v) = base_angle
              + warp_amplitude * sin(warp_frequency * u) * sin(warp_frequency * v)
 </code>
 
-It uses midpoint integration and clips each curve at the first intersection with the polygonal region boundary. The typed result is a set of parameter-space polylines. Seed and integration work are bounded, with excessive requests reported as configuration errors. This starter generator does not yet continue curves into neighboring regions or apply derived coordinate maps.
+It uses midpoint integration and clips each curve at the first intersection with the polygonal region boundary. The typed result is a set of parameter-space polylines. Seed and integration work are bounded, with excessive requests reported as configuration errors. An invertible coordinate map may define the field in derived coordinates; the direction is pulled back through its Jacobian before integration. This starter generator does not yet continue curves into neighboring regions.
 
 ===== Generator B: PDE =====
 

@@ -1,3 +1,4 @@
+#include "pattern/surface/coordinate_map.hpp"
 #include "pattern/surface/cylinder_patch.hpp"
 #include "pattern/surface/domain2.hpp"
 #include "pattern/surface/plane_patch.hpp"
@@ -109,6 +110,47 @@ void test_cylinder_patch()
         "cylinder rejects points outside its domain");
 }
 
+void test_coordinate_maps()
+{
+    const pattern::IdentityCoordinateMap identity;
+    const auto identity_value = identity.evaluate({0.25, -0.5});
+    expect(identity_value.has_value(), "identity map evaluates finite coordinates");
+    if (identity_value) {
+        expect(close(identity_value.value().h, 0.25), "identity h coordinate");
+        expect(close(identity_value.value().k, -0.5), "identity k coordinate");
+    }
+
+    const auto rotation = pattern::AffineCoordinateMap::create(
+        0.0, -1.0, 1.0, 0.0, 2.0, 3.0);
+    expect(rotation.has_value(), "invertible affine map is accepted");
+    if (rotation) {
+        expect(rotation.value().capabilities().globally_invertible,
+            "affine map reports its invertibility capability");
+        const auto mapped = rotation.value().evaluate({1.0, 2.0});
+        expect(mapped.has_value(), "affine map evaluates finite coordinates");
+        if (mapped) {
+            expect(close(mapped.value().h, 0.0), "affine h coordinate");
+            expect(close(mapped.value().k, 4.0), "affine k coordinate");
+            const auto inverse = rotation.value().inverse(mapped.value());
+            expect(inverse.has_value(), "affine map inverts its output");
+            if (inverse) {
+                expect(close(inverse.value().u, 1.0), "affine inverse u");
+                expect(close(inverse.value().v, 2.0), "affine inverse v");
+            }
+        }
+    }
+
+    const auto singular = pattern::AffineCoordinateMap::create(
+        1.0, 2.0, 2.0, 4.0, 0.0, 0.0);
+    expect(singular.has_value(), "singular affine map remains evaluable");
+    if (singular) {
+        expect(!singular.value().capabilities().has_inverse,
+            "singular affine map declares that it has no inverse");
+        expect(!singular.value().inverse({1.0, 2.0}),
+            "singular affine inverse request reports failure");
+    }
+}
+
 }  // namespace
 
 int main()
@@ -116,6 +158,7 @@ int main()
     test_domain_validation();
     test_plane_patch();
     test_cylinder_patch();
+    test_coordinate_maps();
 
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";
