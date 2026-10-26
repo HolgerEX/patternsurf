@@ -42,6 +42,9 @@ public:
 
     [[nodiscard]] std::vector<Diagnostic> validate() const;
 
+    [[nodiscard]] Result<VertexId> move_vertex(
+        VertexId vertex,
+        ParameterPoint position);
     [[nodiscard]] Result<VertexId> insert_boundary_vertex(
         BoundaryId boundary,
         ParameterPoint position);
@@ -57,6 +60,9 @@ public:
 private:
     explicit Partition(Domain2 domain);
 
+    [[nodiscard]] Result<VertexId> move_vertex_in_place(
+        VertexId vertex,
+        ParameterPoint position);
     [[nodiscard]] Result<VertexId> insert_boundary_vertex_in_place(
         BoundaryId boundary,
         ParameterPoint position);

@@ -100,6 +100,59 @@ void test_boundary_insertion_and_split()
         "boundary insertion and split produce two regions");
 }
 
+void test_shared_vertex_motion_is_transactional()
+{
+    pattern::Partition partition = make_partition();
+    const auto split = partition.split_region(
+        pattern::RegionId{1}, pattern::VertexId{1}, pattern::VertexId{3});
+    expect(split.has_value(), "setup split creates a shared boundary");
+    if (!split) {
+        return;
+    }
+
+    const auto shared = std::find_if(
+        partition.boundaries().begin(),
+        partition.boundaries().end(),
+        [](const auto& item) {
+            return item.second.left_region && item.second.right_region;
+        });
+    if (shared == partition.boundaries().end()) {
+        expect(false, "setup has an internal boundary");
+        return;
+    }
+
+    const pattern::Boundary boundary = shared->second;
+    const pattern::ParameterPoint from = partition.vertices().at(boundary.from);
+    const pattern::ParameterPoint to = partition.vertices().at(boundary.to);
+    const auto inserted = partition.insert_boundary_vertex(
+        boundary.id,
+        {(from.u + to.u) * 0.5, (from.v + to.v) * 0.5});
+    expect(inserted.has_value(), "internal boundary vertex insertion succeeds");
+    if (!inserted) {
+        return;
+    }
+
+    const auto moved = partition.move_vertex(inserted.value(), {1.1, 0.5});
+    expect(moved.has_value(), "shared interior vertex moves successfully");
+    expect(partition.validate().empty(),
+        "shared vertex motion preserves both incident region cycles");
+    if (moved) {
+        expect(partition.vertices().at(moved.value()).u == 1.1,
+            "moved position is published");
+    }
+
+    const auto rejected = partition.move_vertex(inserted.value(), {3.0, 0.5});
+    expect(!rejected, "out-of-domain vertex motion is rejected");
+    expect(partition.vertices().at(inserted.value()).u == 1.1,
+        "rejected vertex motion rolls back");
+    expect(partition.validate().empty(),
+        "partition remains valid after rejected vertex motion");
+
+    const auto perimeter_move = partition.move_vertex(
+        pattern::VertexId{1}, {0.1, 0.0});
+    expect(!perimeter_move, "domain-perimeter vertices remain fixed");
+}
+
 void test_shared_boundary_insertion_and_merge()
 {
     pattern::Partition partition = make_partition();
@@ -294,6 +347,7 @@ int main()
     test_initial_partition();
     test_split_and_merge();
     test_boundary_insertion_and_split();
+    test_shared_vertex_motion_is_transactional();
     test_shared_boundary_insertion_and_merge();
     test_split_of_region_with_existing_neighbor();
     test_merge_preserves_other_adjacencies();

@@ -34,6 +34,7 @@ The first implementation uses a rectangular parameter domain, simple polygonal f
 
 The implemented transactional operations are:
   * query region adjacency through shared boundary incidence;
+  * move an interior shared-boundary vertex while keeping domain-perimeter vertices fixed;
   * insert a vertex strictly inside an existing boundary segment;
   * split a face by a segment joining two existing, non-adjacent boundary vertices when the segment lies inside that face;
   * merge neighboring faces when their shared interface is one contiguous chain of boundary segments;
@@ -41,7 +42,7 @@ The implemented transactional operations are:
 
 Each operation edits a candidate partition, validates the complete candidate, and publishes it only on success. Failed edits leave the original partition and its ID counters unchanged.
 
-This initial slice does not support faces with holes, disjoint interface chains during merge, free-standing polygon creation, arbitrary gaps, curved boundaries, or boundary motion. New regions are introduced by splitting an existing face; these limitations should be expanded only with corresponding topology and geometry tests.
+This initial slice does not support faces with holes, disjoint interface chains during merge, free-standing polygon creation, arbitrary gaps, curved boundaries, or moving the domain perimeter. New regions are introduced by splitting an existing face; these limitations should be expanded only with corresponding topology and geometry tests.
 
 ===== Transactional edits =====
 

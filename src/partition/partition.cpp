@@ -521,6 +521,62 @@ std::vector<Diagnostic> Partition::validate() const
     return issues;
 }
 
+Result<VertexId> Partition::move_vertex(
+    VertexId vertex,
+    ParameterPoint position)
+{
+    Partition candidate = *this;
+    auto result = candidate.move_vertex_in_place(vertex, position);
+    if (!result) {
+        return Result<VertexId>::failure(result.error());
+    }
+
+    const std::vector<Diagnostic> issues = candidate.validate();
+    if (!issues.empty()) {
+        return Result<VertexId>::failure(issues.front());
+    }
+
+    *this = std::move(candidate);
+    return Result<VertexId>::success(result.value());
+}
+
+Result<VertexId> Partition::move_vertex_in_place(
+    VertexId vertex,
+    ParameterPoint position)
+{
+    auto found = vertices_.find(vertex);
+    if (found == vertices_.end()) {
+        return Result<VertexId>::failure(diagnostic(
+            ErrorCode::not_found,
+            "Cannot move a missing vertex."));
+    }
+    if (!domain_.contains(position)) {
+        return Result<VertexId>::failure(diagnostic(
+            ErrorCode::invalid_argument,
+            "Moved vertex must remain inside the parameter domain."));
+    }
+
+    const bool on_domain_boundary = std::any_of(
+        boundaries_.begin(),
+        boundaries_.end(),
+        [vertex](const auto& item) {
+            const Boundary& boundary = item.second;
+            const bool incident = boundary.from == vertex || boundary.to == vertex;
+            const bool exterior =
+                static_cast<bool>(boundary.left_region)
+                != static_cast<bool>(boundary.right_region);
+            return incident && exterior;
+        });
+    if (on_domain_boundary) {
+        return Result<VertexId>::failure(diagnostic(
+            ErrorCode::unsupported_operation,
+            "Domain-perimeter vertices are fixed in the initial partition model."));
+    }
+
+    found->second = position;
+    return Result<VertexId>::success(vertex);
+}
+
 Result<VertexId> Partition::insert_boundary_vertex(
     BoundaryId boundary,
     ParameterPoint position)

@@ -53,6 +53,15 @@ Integrate curves through a direction/vector field defined in parameter coordinat
 
 Boundary interactions may include matched endpoints, prescribed crossing positions, tangent alignment, and controlled termination. Define how a curve crossing an interface finds a corresponding continuation in the neighboring region; do not assume equal local parameters imply compatible field directions unless explicitly intended.
 
+The initial built-in implementation is a deterministic direction-field tracer with a regular parameter-space seed grid. Its direction angle is
+
+<code>
+theta(u,v) = base_angle
+             + warp_amplitude * sin(warp_frequency * u) * sin(warp_frequency * v)
+</code>
+
+It uses midpoint integration and clips each curve at the first intersection with the polygonal region boundary. The typed result is a set of parameter-space polylines. Seed and integration work are bounded, with excessive requests reported as configuration errors. This starter generator does not yet continue curves into neighboring regions or apply derived coordinate maps.
+
 ===== Generator B: PDE =====
 
 Use a field state defined on a discretization of the region. A reaction-diffusion system is a starter example. The generator delegates discretization and time integration to numerical interfaces, declares required operators and boundary conditions, and reports stability/convergence failures.

@@ -45,6 +45,15 @@ target_include_directories(pattern_partition
 )
 target_compile_features(pattern_partition PUBLIC cxx_std_20)
 
+add_library(pattern_generators src/generators/vector_field_generator.cpp)
+add_library(PatternSurface::Generators ALIAS pattern_generators)
+target_link_libraries(pattern_generators PUBLIC PatternSurface::Partition)
+target_include_directories(pattern_generators
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
+target_compile_features(pattern_generators PUBLIC cxx_std_20)
+
 target_include_directories(pattern_core
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -86,9 +95,11 @@ endfunction()
 
 pattern_enable_warnings(pattern_core)
 pattern_enable_warnings(pattern_partition)
+pattern_enable_warnings(pattern_generators)
 pattern_enable_warnings(pattern_cli)
 pattern_enable_sanitizers(pattern_core)
 pattern_enable_sanitizers(pattern_partition)
+pattern_enable_sanitizers(pattern_generators)
 pattern_enable_sanitizers(pattern_cli)
 
 if(BUILD_TESTING)
@@ -105,4 +116,11 @@ if(BUILD_TESTING)
     pattern_enable_warnings(pattern_partition_tests)
     pattern_enable_sanitizers(pattern_partition_tests)
     add_test(NAME pattern_partition_tests COMMAND pattern_partition_tests)
+
+    add_executable(pattern_generator_tests tests/generator_tests.cpp)
+    target_link_libraries(pattern_generator_tests PRIVATE PatternSurface::Generators)
+    target_compile_features(pattern_generator_tests PRIVATE cxx_std_20)
+    pattern_enable_warnings(pattern_generator_tests)
+    pattern_enable_sanitizers(pattern_generator_tests)
+    add_test(NAME pattern_generator_tests COMMAND pattern_generator_tests)
 endif()
